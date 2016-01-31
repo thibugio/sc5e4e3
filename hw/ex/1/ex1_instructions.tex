@@ -1,0 +1,125 @@
+\documentclass{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath, listings}
+\begin{document}
+
+%\newcommand\bnf[1]{\text{\begin{verbatim} #1 \end{verbatim}}}
+\newcommand{\bnf}[1]{\lstinline{#1}}
+\newcommand\mapfunc[1]{$M_{\text{#1}}$}
+\newcommand\bool[1]{{\it #1}}
+\newcommand\mapping[1]{{\it #1}}
+
+\begin{center} {\bf Written Exercise 1} \\
+ due Friday, February 5, 2016 in class \end{center}
+
+\begin{description}
+\item[Problem 1:]
+Consider the following ambiguous BNF grammar: 
+\begin{align*}
+\bnf{<C>} \rightarrow\quad & \bnf{<C> ? <C> : <C> | <V> = <C>}\\
+\bnf{<C>} \rightarrow\quad & \bnf{<C> && <C> | <C> || <C> | !<C> | <V> | true | false | (<C>)}\\
+\bnf{<V>} \rightarrow\quad & \bnf{x | y | z}
+\end{align*}
+Rewrite the grammar so that it is no longer ambiguous and has the following properties:
+The operators have the following precedence, from highest to lowest: \lstinline{( ), !, &&, ||, ?:, =}.
+The \lstinline{!, ?:}, and = operators are right associative, and the \lstinline{&&} and $||$ operators are left associative.
+
+\item[Problem 2:] Consider the following grammar (yes, it is ambiguous but that is unimportant). The subscripts
+are used to distinguish otherwise identical non-terminals for the purpose of the questions below.
+\begin{align*}
+\bnf{<start1>} \rightarrow\quad 	&\bnf{<stmt3> ; <start3>}\\
+\bnf{<start2>} \rightarrow\quad 	&\bnf{<stmt4>}\\
+\bnf{<stmt1>} \rightarrow\quad 	&\bnf{<declare2>}\\
+\bnf{<stmt2>} \rightarrow\quad 	&\bnf{<assign2>}\\
+\bnf{<declare1>} \rightarrow\quad &\bnf{<type3> <var>}\\
+\bnf{<type1>} \rightarrow\quad 	&\bnf{int}\\
+\bnf{<type2>} \rightarrow\quad 	&\bnf{double}\\
+\bnf{<assign1>} \rightarrow\quad &\bnf{<var> = <expression3>}\\
+\bnf{<expression1>} \rightarrow\quad &\bnf{<expression4> <op> <expression5>}\\
+\bnf{<expression2>} \rightarrow\quad &\bnf{<value4>}\\
+\bnf{<op>} \rightarrow\quad 		&\bnf{+ | - | * | ÷}\\
+\bnf{<value1>} \rightarrow\quad 	&\bnf{<var>}\\
+\bnf{<value2>} \rightarrow\quad 	&\bnf{<integer>}\\
+\bnf{<value3>} \rightarrow\quad 	&\bnf{<float>}\\
+\bnf{<var>} \rightarrow\quad 	&\bnf{a legal name in the language}\\
+\bnf{<integer>} \rightarrow\quad &\bnf{a base 10 representation of an integer}\\
+\bnf{<float>} \rightarrow\quad 	&\bnf{a base 10 representation of a floating point number}\\
+\end{align*}
+Suppose our static semantic description has five attributes:
+\begin{align*}
+\bnf{type} =\quad             &\text{\{ integer, double \}}\\
+\bnf{typetable(<var>)} =\quad &\text{\{ integer, double, error \}}\\
+\bnf{inittable(<var>)} =\quad &\text{\{ true, false, error \}}\\
+\bnf{typebinding} =\quad 	  &\text{($<$var$>$, \{ integer, double \})}\\
+\bnf{initialized} =\quad 	  &\text{($<$var$>$, \{ true, false \})}
+\end{align*}
+\mapping{typetable} maps each possible variable name to its declared type, and \mapping{inittable} maps each possible variable
+name to a boolean indicating whether the variable has been assigned a value. Initially, both \mapping{typetable} and
+\mapping{inittable} will map all possible variable names to error to indicate that the variables have not been declared
+in the program.\\
+
+\mapping{typebinding} maps a single variable name to its declared type, and \mapping{initialized} maps a single variable
+name to whether it has been assigned a value.\\
+
+For each subscripted non-terminal, provide a rule to calculate its  \mapping{type}, 
+                                                                    \mapping{table}, 
+                                                                    \mapping{inittable}, 
+                                                                    \mapping{typebinding}, and 
+                                                                    \mapping{initialized}
+attributes, if that non-terminal requires that attribute. Each attribute should either be inherited or
+synthesized, but not both. For example, here are two such rules:
+\begin{align*}
+\bnf{<value2>.type} :=\quad			&\bnf{integer}\\
+\bnf{<declare1>.initialized} :=\quad &\bnf{(<var>, false)}
+\end{align*}
+(Here I am using := to create a mapping so you can use = to mean only mathematical equality.)
+
+\item[Problem 3:] Suppose we want to enforce the following rules in the grammar from Problem 2:
+\begin{enumerate}\renewcommand{\labelenumi}{(\alph{enumi}) }
+\item The type of the expression must match the type of the variable in all assignment statements.
+\item A variable must be declared before it can be used.
+\item A variable must be assigned a value as its first use in the program.
+\end{enumerate}
+Where in the parse tree should these rules be checked (i.e. at which non-terminals), and write the precise
+tests that should be done at those non-terminals using the attibutes available.
+
+\item[Problem 4:] Use axiomatic semantics to prove that the postcondition is true following the execution of the
+program assuming the precondition is true:
+\lstset{language=C}
+\begin{lstlisting}
+//Precondition: n ≥ 0 and A contains n elements indexed from 0
+bound = n;
+while (bound > 0) {
+    for (i = 0; i < bound-1; i++) {
+        if (A[i] > A[i+1]) {
+            swap = A[i];
+            A[i] = A[i+1];
+            A[i+1] = swap;
+            t = i+1;
+        }
+        t = 0;
+    }
+    bound = t;
+}
+//Postcondition: A[0] ≤ A[1] ≤ ...≤ A[n-1]
+\end{lstlisting}
+
+\item[Problem 5:] Let Mstate be a denotational semantic mapping that takes a syntax rule and a state and
+produces a state. Define the Mstate mapping for the following three syntax rules assuming we allow side
+effects, that is, assuming expressions and conditions can change the values of variables.
+\begin{align*}
+\bnf{<assign>} \rightarrow\quad 	&\bnf{<var> = <expression>}\\
+\text{$<$if$>$}     \rightarrow\quad 	&\text{if $<$condition$>$ then $<$statement1$>$ else $<$statement2$>$}\\
+\text{$<$while$>$}  \rightarrow\quad 	&\text{while $<$condition$>$ $<$loop body$>$}
+\end{align*}
+Assume we have the following mappings defined:
+\begin{description}
+\item[]\mapfunc{value} takes a syntax rule and a state and produces a numeric value (or an error condition).
+\item[]\mapfunc{boolean} takes a syntax rule and a state and produces a \bool{true} / \bool{false} value (or an error condition).
+\item[]\mapfunc{name} takes a syntax rule and produces a name (or an error condition).
+\item[]\mapping{Add} takes a name, a value, and a state and produces a state that adds the pair {\it(name, value)} to the state.
+\item[]\mapping{Remove} takes a name and a state and produces a state that removes any pair that contains the name as the
+first element.\end{description}
+You may assume the \mapping{Add} and \mapping{Remove} mappings do not produce errors.
+\end{description}
+\end{document}

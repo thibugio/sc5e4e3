@@ -1,14 +1,22 @@
-Written Exercise 1
-due Friday, February 5, 2016 in class
-Problem 1: Consider the following ambiguous BNF grammar:
-<C> → <C> ? <C> : <C> | <V> = <C>
-<C> → <C> && <C> | <C> || <C> | !<C> | <V> | true | false | (<C>)
-<V> → x | y | z
+\documentclass{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath}
+\begin{document}
+\begin{centering} {\bf Written Exercise 1}\\due Friday, February 5, 2016 in class \end{centering}
+\begin{description}
+\item[Problem 1:]
+Consider the following ambiguous BNF grammar: 
+\begin{aligned*}
+<C> & → & <C> ? <C> : <C> | <V> = <C>\\
+<C> & → & <C> && <C> | <C> || <C> | !<C> | <V> | true | false | (<C>)\\
+<V> & → & x | y | z
+\end{aligned*}
 Rewrite the grammar so that it is no longer ambiguous and has the following properties:
 The operators have the following precedence, from highest to lowest: ( ), !, &&, ||, ?:, =.
 The !, ?:, and = operators are right associative, and the && and || operators are left associative.
 Problem 2: Consider the following grammar (yes, it is ambiguous but that is unimportant). The subscripts
 are used to distinguish otherwise identical non-terminals for the purpose of the questions below.
+\begin{aligned*}
 <start1> → <stmt3> ; <start3>
 <start2> → <stmt4>
 <stmt1> → <declare2>
@@ -26,6 +34,7 @@ are used to distinguish otherwise identical non-terminals for the purpose of the
 <var> → a legal name in the language
 <integer> → a base 10 representation of an integer
 <float> → a base 10 representation of a floating point number
+\end{aligned*}
 Suppose our static semantic description has five attributes:
 type = { integer, double }
 typetable(<var>) = { integer, double, error }
@@ -81,3 +90,5 @@ Add takes a name, a value, and a state and produces a state that adds the pair (
 Remove takes a name and a state and produces a state that removes any pair that contains the name as the
 first element.
 You may assume the Add and Remove mappings do not produce errors.
+\end{description}
+\end{document}
