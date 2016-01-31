@@ -1,10 +1,42 @@
 \documentclass{article}
 
 \usepackage[margin=1in]{geometry}
-\usepackage{amsmath}
-
+\usepackage{amsmath, listings}
 \begin{document}
+\lstset{language=C}
+\newcommand\opspace{\text{\ \ }}
+\newcommand\symname[1]{\text{\tt#1}}
+\newcommand\nonterm[1]{\ensuremath{{\tt<}\symname{#1}{\tt>}}}
+\newcommand\nontermn[2]{\ensuremath{{\tt<}\symname{#1}_{#2}{\tt>}}}
+\newcommand\term[1]{\text{\tt\bf#1}}
+\newcommand\bnfor{\ensuremath{\quad|\quad}}
+\newcommand\progor{\ensuremath{||}}
+\newcommand\progeq{\opspace\lstinline{&&}\opspace}
+\newcommand\prognot{\opspace\lstinline{!}\opspace}
+\newcommand\rarrow{\ensuremath{\rightarrow}}
+\noindent
+Rebecca Frederick\\
+EECS 345\\
+Written Exercise 1\\
+\today\\
 \begin{enumerate}
+\renewcommand{\arraystretch}{1.5}
+\item \begin{tabular}[t]{rcl}
+        % operator precedence (high to low): (), !, &&, ||, ?:, =
+        % right-associative operators: !, ?:, =
+        % left-associative operators: &&, ||
+        \nonterm{C} & \rarrow & \nonterm{V} = \nonterm{D} \bnfor \nonterm{V} \\
+        \nonterm{V} & \rarrow & \term{x} \bnfor \term{y} \bnfor \term{z} \\
+        \nonterm{D} & \rarrow & \nonterm{E} ? \nonterm{D} : \nonterm{D} \bnfor \nonterm{E} \\
+        \nonterm{E} & \rarrow & \nonterm{E} \progor \nonterm{F} \bnfor \nonterm{F} \\
+        \nonterm{F} & \rarrow & \nonterm{F} \progeq \nonterm{G} \bnfor \nonterm{G} \\
+        \nonterm{G} & \rarrow & \prognot \nonterm{G} \bnfor \nonterm{H} \\
+        \nonterm{H} & \rarrow & ( \nonterm{H} ) \bnfor \nonterm{I} \\
+        \nonterm{I} & \rarrow & \nonterm{C} 
+      \end{tabular}
+\item asdf
+\item asdf
+\item asdf
 \item asdf
 \end{enumerate}
 \end{document}
