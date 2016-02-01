@@ -25,6 +25,8 @@
 
 \newcommand\nterm[1]{\lbr\sym{#1}\rbr}
 \newcommand\ntermn[2]{\lbr\sym{#1}$\text{}_{#2}$\rbr}
+\newcommand\na{{\it N/A}}
+\newcommand\es{\ensuremath{\emptyset}}
 
 \newcolumntype{x}{>{\small\bgroup\ttfamily\bgroup}l<{\egroup\egroup}}
 \newcolumntype{y}{>{\small\bgroup\ttfamily\bgroup}c<{\egroup\egroup}}
@@ -62,17 +64,19 @@ Written Exercise 1\\
 
 Attribute Rules:\\
 \begin{longtable}[t]{>{\small\bgroup\ttfamily\bgroup}p{\textwidth}<{\egroup\egroup}}
-\ntermn{start}{1}.type := \\
-\ntermn{start}{1}.typetable(<var>) := \\
-\ntermn{start}{1}.inittable(<var>) := \\
-\ntermn{start}{1}.typebinding := \\
-\ntermn{start}{1}.initialized := \\\\
+{\it \ntermn{start}{1} \rarrow \ntermn{stmt}{3} ; \ntermn{start}{3} }\\
+\ntermn{start}{1}.type := \na \\
+\ntermn{start}{1}.typetable(<var>) := \ntermn{stmt}{3}.typetable\\
+\ntermn{start}{1}.inittable(<var>) := \ntermn{stmt}{3}.initvar\\
+\ntermn{start}{1}.typebinding := \na\\
+\ntermn{start}{1}.initialized := \na\\\\
 
-\ntermn{start}{2}.type := \\
-\ntermn{start}{2}.typetable(<var>) := \\
-\ntermn{start}{2}.inittable(<var>) := \\
-\ntermn{start}{2}.typebinding := \\
-\ntermn{start}{2}.initialized := \\\\
+{\it \ntermn{start}{2} \rarrow \ntermn{stmt}{4}}\\
+\ntermn{start}{2}.type := \na\\
+\ntermn{start}{2}.typetable(<var>) := \es\\
+\ntermn{start}{2}.inittable(<var>) := \es\\
+\ntermn{start}{2}.typebinding := \na\\
+\ntermn{start}{2}.initialized := \na\\\\
 
 \ntermn{stmt}{1}.type := \\
 \ntermn{stmt}{1}.typetable(<var>) := \\
