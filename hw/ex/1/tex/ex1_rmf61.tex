@@ -1,0 +1,149 @@
+\documentclass{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath, listings, array, longtable}
+\begin{document}
+\lstset{language=C,
+        escapeinside={@}{@},
+        escapechar=@,
+        basicstyle=\ttfamily\small
+}
+
+\newcommand\opspace{\ \ }
+\newcommand\por{\opspace\sym{||}\opspace}
+\newcommand\pand{\opspace\sym{&&}\opspace}
+\newcommand\pnot{\opspace\sym{!}\opspace}
+\newcommand\peq{\opspace\sym{=}\opspace}
+
+\newcommand\bnfor{\ \ensuremath{|}\ }
+\newcommand\rarrow{\ensuremath{\rightarrow}}
+
+\newcommand\sym[1]{{\ttfamily\small#1}}
+\newcommand\sub[1]{\ensuremath{\text{}_{#1}}}
+\newcommand\rbr{\sym{>}}
+\newcommand\lbr{\sym{<}}
+
+\newcommand\nterm[1]{\lbr\sym{#1}\rbr}
+\newcommand\ntermn[2]{\lbr\sym{#1}$\text{}_{#2}$\rbr}
+
+\newcolumntype{x}{>{\small\bgroup\ttfamily\bgroup}l<{\egroup\egroup}}
+\newcolumntype{y}{>{\small\bgroup\ttfamily\bgroup}c<{\egroup\egroup}}
+\newcolumntype{z}{>{\small\bgroup\ttfamily\bgroup}r<{\egroup\egroup}}
+
+\noindent
+Rebecca Frederick\\
+EECS 345\\
+Written Exercise 1\\
+\today\\
+\begin{enumerate}
+\renewcommand{\arraystretch}{1.5}
+\item \begin{tabular}[t]{rcl}
+        % operator precedence (high to low): (), !, &&, ||, ?:, =
+        % right-associative operators: !, ?:, =
+        % left-associative operators: &&, ||
+        \nterm{C} & \rarrow & \lstinline`<V> = <D>` \bnfor \nterm{V}\\
+        \nterm{V} & \rarrow & \sym{x} \bnfor \sym{y} \bnfor \sym{z} \\
+        \nterm{D} & \rarrow & \lstinline`<E> ? <D> : <D>` \bnfor \nterm{E} \\
+        \nterm{E} & \rarrow & \lstinline`<E> || <F>` \bnfor \nterm{F} \\
+        \nterm{F} & \rarrow & \lstinline`<F> && <G>` \bnfor \nterm{G} \\
+        \nterm{G} & \rarrow & \lstinline`!<G>` \bnfor \nterm{H} \\
+        \nterm{H} & \rarrow & \lstinline`(<H>)` \bnfor \nterm{I} \\
+        \nterm{I} & \rarrow & \sym{true} \bnfor \sym{false}
+      \end{tabular}
+\item Static Semantic Attributes: \\
+\renewcommand{\arraystretch}{1}
+\begin{tabular}[t]{xyxl}
+    type & \peq & \{integer, double\} & (synthesized)\\
+    typetable(<var>) & \peq & \{integer, double, error\} & (inherited)\\
+    inittable(<var>) & \peq & \{true, false, error\} & (inherited)\\
+    typebinding & \peq & (<var>, \{integer, double\}) & (synthesized)\\
+    initialized & \peq & (<var>, \{true, false\}) & (synthesized)
+\end{tabular}\\
+
+Attribute Rules:\\
+\begin{longtable}[t]{>{\small\bgroup\ttfamily\bgroup}p{\textwidth}<{\egroup\egroup}}
+\ntermn{start}{1}.type := \\
+\ntermn{start}{1}.typetable(<var>) := \\
+\ntermn{start}{1}.inittable(<var>) := \\
+\ntermn{start}{1}.typebinding := \\
+\ntermn{start}{1}.initialized := \\\\
+
+\ntermn{start}{2}.type := \\
+\ntermn{start}{2}.typetable(<var>) := \\
+\ntermn{start}{2}.inittable(<var>) := \\
+\ntermn{start}{2}.typebinding := \\
+\ntermn{start}{2}.initialized := \\\\
+
+\ntermn{stmt}{1}.type := \\
+\ntermn{stmt}{1}.typetable(<var>) := \\
+\ntermn{stmt}{1}.inittable(<var>) := \\
+\ntermn{stmt}{1}.typebinding := \\
+\ntermn{stmt}{1}.initialized := \\\\
+
+\ntermn{stmt}{2}.type := \\
+\ntermn{stmt}{2}.typetable(<var>) := \\
+\ntermn{stmt}{2}.inittable(<var>) := \\
+\ntermn{stmt}{2}.typebinding := \\
+\ntermn{stmt}{2}.initialized := \\\\
+
+\ntermn{declare}{1}.type := \\
+\ntermn{declare}{1}.typetable(<var>) := \\
+\ntermn{declare}{1}.inittable(<var>) := \\
+\ntermn{declare}{1}.typebinding := \\
+\ntermn{declare}{1}.initialized := \\\\
+
+\ntermn{type}{1}.type := \\
+\ntermn{type}{1}.typetable(<var>) := \\
+\ntermn{type}{1}.inittable(<var>) := \\
+\ntermn{type}{1}.typebinding := \\
+\ntermn{type}{1}.initialized := \\\\
+
+\ntermn{type}{2}.type := \\
+\ntermn{type}{2}.typetable(<var>) := \\
+\ntermn{type}{2}.inittable(<var>) := \\
+\ntermn{type}{2}.typebinding := \\
+\ntermn{type}{2}.initialized := \\\\
+
+\ntermn{assign}{1}.type := \\
+\ntermn{assign}{1}.typetable(<var>) := \\
+\ntermn{assign}{1}.inittable(<var>) := \\
+\ntermn{assign}{1}.typebinding := \\
+\ntermn{assign}{1}.initialized := \\\\
+
+\ntermn{expression}{1}.type := \\
+\ntermn{expression}{1}.typetable(<var>) := \\
+\ntermn{expression}{1}.inittable(<var>) := \\
+\ntermn{expression}{1}.typebinding := \\
+\ntermn{expression}{1}.initialized := \\\\
+
+\ntermn{expression}{2}.type := \\
+\ntermn{expression}{2}.typetable(<var>) := \\
+\ntermn{expression}{2}.inittable(<var>) := \\
+\ntermn{expression}{2}.typebinding := \\
+\ntermn{expression}{2}.initialized := \\\\
+
+\ntermn{value}{1}.type := \\
+\ntermn{value}{1}.typetable(<var>) := \\
+\ntermn{value}{1}.inittable(<var>) := \\
+\ntermn{value}{1}.typebinding := \\
+\ntermn{value}{1}.initialized := \\\\
+
+\ntermn{value}{2}.type := \\
+\ntermn{value}{2}.typetable(<var>) := \\
+\ntermn{value}{2}.inittable(<var>) := \\
+\ntermn{value}{2}.typebinding := \\
+\ntermn{value}{2}.initialized := \\\\
+
+\ntermn{value}{3}.type := \\
+\ntermn{value}{3}.typetable(<var>) := \\
+\ntermn{value}{3}.inittable(<var>) := \\
+\ntermn{value}{3}.typebinding := \\
+\ntermn{value}{3}.initialized := \\
+\caption{Attribute Rules}
+\end{longtable}
+
+\item asdf
+\item asdf
+\item asdf
+\end{enumerate}
+\end{document}
