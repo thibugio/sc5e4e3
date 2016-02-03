@@ -10,12 +10,12 @@
         basicstyle=\ttfamily\small
 }
 
-\newcommand\opspaceR{\ }
-\newcommand\opspaceL{\ \ }
-\newcommand\por{\opspaceR\sym{||}\opspaceL}
-\newcommand\pand{\opspaceR\sym{&&}\opspaceL}
-\newcommand\pnot{\opspaceR\sym{!}\opspaceL}
-\newcommand\peq{\opspaceR\sym{=}\opspaceL}
+\newcommand\opspaceL{\ }
+\newcommand\opspaceR{\ \ }
+\newcommand\por{\opspaceL\sym{||}\opspaceR}
+\newcommand\pand{\opspaceL\sym{&&}\opspaceR}
+\newcommand\pnot{\opspaceL\sym{!}\opspaceR}
+\newcommand\peq{\opspaceL\sym{=}\opspaceR}
 
 \newcommand\sym[1]{{\ttfamily\small#1}}
 \newcommand\sub[1]{\ensuremath{\text{}_{#1}}}
@@ -28,12 +28,13 @@
 \newcommand\es{\ensuremath{\emptyset}}
 \newcommand\union{\ensuremath{\cup}\ }
 \newcommand\bnfor{\ \ensuremath{|}\ }
-\newcommand\rarrow{\opspaceR\ensuremath{\rightarrow}\opspaceL}
+\newcommand\rarrow{\opspaceL\ensuremath{\rightarrow}\opspaceR}
 
 \newcommand\mmap[1]{\ensuremath{M_{#1}}}
 \newcommand\fmap[1]{{\it #1}}
 
 \newcommand\na{{\it N/A}}
+\newcommand\et{\opspaceL\ensuremath{\wedge}\opspaceR}
 
 \newcolumntype{P}[1]{>{\small\bgroup\ttfamily\bgroup}p{#1\textwidth}<{\egroup\egroup}}
 \newcolumntype{C}[1]{>{\small\bgroup\ttfamily\bgroup}#1<{\egroup\egroup}}
@@ -176,27 +177,72 @@ Attribute Rules:\\
 \item asdf
 \item Loop Invariants: 
     \begin{description}
-    \item [Outer (while) loop invariant:] The elements $A[bound \dots n-1]$ are in non-decreasing order
-    \item [Inner (for) loop invariant:] The elements $A[bound \dots n-1]$ are in non-decreasing order and\\ 
-                                        $A[i] \leq A[bound]$ and $A[0\dots i] \leq A[i+1] \leq A[bound-1]$
+    \item [Outer (while) Loop Goal:] The elements $A[0\dots n-1]$ are sorted in non-decreasing order
+    \item [Outer (while) Loop Invariant:] The elements $A[bound \dots n-1]$ are in non-decreasing order \et\\
+                                          the elements $A[t\dots bound-1]$ have yet to be sorted.
+                                          
+                                          (The last condition may be redundant but I felt it necessary to include $t$ in the outer loop invariant since it
+                                           is initiallized outside of the inner loop and also interacts with a variable ($bound$) in the outer loop.)
+    \item [Inner (for) Loop Goal:] the elements $A[t\dots n-1]$ are sorted in non-decreasing order
+    \item [Inner (for) Loop Invariant:] The elements $A[bound \dots n-1]$ are in non-decreasing order \et\\ 
+                                        $A[0\dots i] \leq A[t] \et$ \\
+                                        $A[t] \leq A[bound]$.
     \end{description}
 {\bf Precondition:} $n \ge 0$ and $A$ contains $n$ elements indexed from 0
 \begin{lstlisting}
-bound = n;
-while (bound > 0) {
+bound = n; 
+while (bound > 0) { 
+  
+  // Assume Outer Loop Invariant is true
   t = 0;
-  for (i = 0; i < bound - 1; i++) {
+  
+  for (i = 0; i < bound - 1; i++) { 
+    
+    // Assume Inner Loop Invariant is true
     if (A[i] > A[i+1]) {
-      swap = A[i];
+      
+      // WP (Inner):
+      // @~$A[bound\dots n-1]$~@ are in non-decreasing order @~\et~@
+      // @~$A[0\dots i-1] \leq A[i]$ \et~@
+      // @~$A[i] \leq A[bound]$~@  
+      swap = A[i]; 
+
+      // WP (Inner):
+      // @~$A[bound\dots n-1]$~@ are in non-decreasing order @~\et~@
+      // @~$A[0\dots i-1] \leq A[i+1]$ \et~@
+      // @~$A[i+1] \leq A[bound]$~@  
       A[i] = A[i+1];
+
+      // WP (Inner):
+      // @~$A[bound\dots n-1]$~@ are in non-decreasing order @~\et~@
+      // @~$A[0\dots i] \leq$~@ swap @~\et~@
+      // swap @~$\leq A[bound]$~@
       A[i+1] = swap;
-      t = i + 1;
+
+      // WP (Inner):
+      // @~$A[bound\dots n-1]$~@ are in non-decreasing order @~\et~@
+      // @~$A[0\dots i] \leq A[i+1]$ \et~@
+      // @~$A[i+1] \leq A[bound]$~@
+      t = i + 1; 
     }
-  } // i = bound-1 and the elements @~$A[bound\dots n-1]$~@ are in non-decreasing order and $A[i] \leq A[bound]$~@
-  bound = t;
-} // bound = 0 and the elements @~$A[0\dots n-1]$~@ are in non-decreasing order
+    // (loop termination: i=bound-1, t=`the last i+1 for which @~$A[i] > A[i+1]$~@')
+    // i=bound-1 @~\et $A[t] \leq A[bound]$ \et $A[0\dots i] \leq A[t]$ \et~@
+    //    @~$A[bound \dots n-1]$~@ are in non-decreasing order @~\rarrow~@
+    //        @~$A[t\dots n-1]$~@ are sorted in non-decreasing order
+    // i++
+  }
+  // WP (Outer): 
+  // @~$A[bound\dots n-1]$~@ are in non-decreasing order @~\et~@
+  //    @~$A[t\dots bound-1]$~@ have yet to be sorted
+  bound = t;  
+} 
+// (loop termination: bound=0, t=0)
+// bound=0 @~\et~@
+// @~$A[0\dots n-1]$~@ are sorted in non-decreasing order @~\et~@
+//    @~$A[0\dots -1]$~@ have yet to be sorted (trivially true) @~\rarrow~@ 
+//        array @~$A$~@ is sorted in non-decreasing order
 \end{lstlisting}
-{\bf Postcondition:} $A[0] \le A[1] \le \dots \le A[n-1]$
+{\bf Postcondition:} $A[0] \le A[1] \le \dots \le A[n-1]$ (i.e., array $A$ is sorted in non-decreasing order)
 
 \item \mmap{state}(\nterm{var} \peq \nterm{expression}, S) = \begin{lstlisting}
 {
