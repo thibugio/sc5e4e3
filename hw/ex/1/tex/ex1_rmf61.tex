@@ -4,19 +4,18 @@
 \usepackage{amsmath, listings, array, longtable}
 \begin{document}
 \lstset{language=C,
-        escapeinside={@}{@},
-        escapechar=@,
+        escapeinside={@~}{~@},
+        tabsize=2,
+        %escapechar=@,
         basicstyle=\ttfamily\small
 }
 
-\newcommand\opspace{\ \ }
-\newcommand\por{\opspace\sym{||}\opspace}
-\newcommand\pand{\opspace\sym{&&}\opspace}
-\newcommand\pnot{\opspace\sym{!}\opspace}
-\newcommand\peq{\opspace\sym{=}\opspace}
-
-\newcommand\bnfor{\ \ensuremath{|}\ }
-\newcommand\rarrow{\ensuremath{\rightarrow}}
+\newcommand\opspaceR{\ }
+\newcommand\opspaceL{\ \ }
+\newcommand\por{\opspaceR\sym{||}\opspaceL}
+\newcommand\pand{\opspaceR\sym{&&}\opspaceL}
+\newcommand\pnot{\opspaceR\sym{!}\opspaceL}
+\newcommand\peq{\opspaceR\sym{=}\opspaceL}
 
 \newcommand\sym[1]{{\ttfamily\small#1}}
 \newcommand\sub[1]{\ensuremath{\text{}_{#1}}}
@@ -25,12 +24,19 @@
 
 \newcommand\nterm[1]{\lbr\sym{#1}\rbr}
 \newcommand\ntermn[2]{\lbr\sym{#1}$\text{}_{#2}$\rbr}
-\newcommand\na{{\it N/A}}
-\newcommand\es{\ensuremath{\emptyset}}
 
-\newcolumntype{x}{>{\small\bgroup\ttfamily\bgroup}l<{\egroup\egroup}}
-\newcolumntype{y}{>{\small\bgroup\ttfamily\bgroup}c<{\egroup\egroup}}
-\newcolumntype{z}{>{\small\bgroup\ttfamily\bgroup}r<{\egroup\egroup}}
+\newcommand\es{\ensuremath{\emptyset}}
+\newcommand\union{\ensuremath{\cup}\ }
+\newcommand\bnfor{\ \ensuremath{|}\ }
+\newcommand\rarrow{\opspaceR\ensuremath{\rightarrow}\opspaceL}
+
+\newcommand\mmap[1]{\ensuremath{M_{#1}}}
+\newcommand\fmap[1]{{\it #1}}
+
+\newcommand\na{{\it N/A}}
+
+\newcolumntype{P}[1]{>{\small\bgroup\ttfamily\bgroup}p{#1\textwidth}<{\egroup\egroup}}
+\newcolumntype{C}[1]{>{\small\bgroup\ttfamily\bgroup}#1<{\egroup\egroup}}
 
 \noindent
 Rebecca Frederick\\
@@ -54,7 +60,7 @@ Written Exercise 1\\
       \end{tabular}
 \item Static Semantic Attributes: \\
 \renewcommand{\arraystretch}{1}
-\begin{tabular}[t]{xyxl}
+\begin{tabular}[t]{C{l}C{c}C{l}l}
     type & \peq & \{integer, double\} & (synthesized)\\
     typetable(<var>) & \peq & \{integer, double, error\} & (inherited)\\
     inittable(<var>) & \peq & \{true, false, error\} & (inherited)\\
@@ -63,13 +69,25 @@ Written Exercise 1\\
 \end{tabular}\\
 
 Attribute Rules:\\
-\begin{longtable}[t]{>{\small\bgroup\ttfamily\bgroup}p{\textwidth}<{\egroup\egroup}}
+\begin{longtable}[t]{P{1}}
 {\it \ntermn{start}{1} \rarrow \ntermn{stmt}{3} ; \ntermn{start}{3} }\\
 \ntermn{start}{1}.type := \na \\
 \ntermn{start}{1}.typetable(<var>) := \ntermn{stmt}{3}.typetable\\
 \ntermn{start}{1}.inittable(<var>) := \ntermn{stmt}{3}.initvar\\
 \ntermn{start}{1}.typebinding := \na\\
 \ntermn{start}{1}.initialized := \na\\\\
+
+\ntermn{stmt}{3}.type := \na\\
+\ntermn{stmt}{3}.typetable := \ntermn{start}{1}.typetable\\
+\ntermn{stmt}{3}.inittable := \ntermn{start}{1}.inittable\\
+\ntermn{stmt}{3}.typebinding := \na\\
+\ntermn{stmt}{3}.initialized := \na\\
+
+\ntermn{start}{3}.type := \na\\
+\ntermn{start}{3}.typetable := \ntermn{stmt}{3}.typetable \union \ntermn{start}{1}.typetable\\
+\ntermn{start}{3}.inittable := \ntermn{stmt}{3}.inittable \union \ntermn{start}{1}.inittable\\
+\ntermn{start}{3}.typebinding := \na\\
+\ntermn{start}{3}.initialized := \na\\
 
 {\it \ntermn{start}{2} \rarrow \ntermn{stmt}{4}}\\
 \ntermn{start}{2}.type := \na\\
@@ -78,17 +96,26 @@ Attribute Rules:\\
 \ntermn{start}{2}.typebinding := \na\\
 \ntermn{start}{2}.initialized := \na\\\\
 
-\ntermn{stmt}{1}.type := \\
-\ntermn{stmt}{1}.typetable(<var>) := \\
-\ntermn{stmt}{1}.inittable(<var>) := \\
-\ntermn{stmt}{1}.typebinding := \\
-\ntermn{stmt}{1}.initialized := \\\\
+\ntermn{stmt}{4}.type := \na\\
+\ntermn{stmt}{4}.typetable := \ntermn{start}{2}.typetable\\
+\ntermn{stmt}{4}.inittable := \ntermn{start}{2}.inittable\\
+\ntermn{stmt}{4}.typebinding := \na\\
+\ntermn{stmt}{4}.initialized := \na\\
 
-\ntermn{stmt}{2}.type := \\
-\ntermn{stmt}{2}.typetable(<var>) := \\
-\ntermn{stmt}{2}.inittable(<var>) := \\
-\ntermn{stmt}{2}.typebinding := \\
-\ntermn{stmt}{2}.initialized := \\\\
+\ntermn{start}{3}.type := \na\\
+{\it \ntermn{stmt}{1} \rarrow \ntermn{declare}{2}}\\
+\ntermn{stmt}{1}.type := \na\\
+\ntermn{stmt}{1}.typetable(<var>) := \es (inherited from \nterm{start})\\
+\ntermn{stmt}{1}.inittable(<var>) := \es (inherited from \nterm{start})\\
+\ntermn{stmt}{1}.typebinding := \na\\
+\ntermn{stmt}{1}.initialized := \na\\\\
+
+{\it \ntermn{stmt}{2} \rarrow \ntermn{assign}{2}}\\
+\ntermn{stmt}{2}.type := \na\\
+\ntermn{stmt}{2}.typetable(<var>) := \es (inherited from \nterm{start})\\
+\ntermn{stmt}{2}.inittable(<var>) := \es (inherited from \nterm{start})\\
+\ntermn{stmt}{2}.typebinding := \na\\
+\ntermn{stmt}{2}.initialized := \na\\\\
 
 \ntermn{declare}{1}.type := \\
 \ntermn{declare}{1}.typetable(<var>) := \\
@@ -147,7 +174,83 @@ Attribute Rules:\\
 \end{longtable}
 
 \item asdf
-\item asdf
-\item asdf
+\item Loop Invariants: 
+    \begin{description}
+    \item [Outer (while) loop invariant:] The elements $A[bound \dots n-1]$ are in non-decreasing order
+    \item [Inner (for) loop invariant:] The elements $A[bound \dots n-1]$ are in non-decreasing order and\\ 
+                                        $A[i] \leq A[bound]$ and $A[0\dots i] \leq A[i+1] \leq A[bound-1]$
+    \end{description}
+{\bf Precondition:} $n \ge 0$ and $A$ contains $n$ elements indexed from 0
+\begin{lstlisting}
+bound = n;
+while (bound > 0) {
+  t = 0;
+  for (i = 0; i < bound - 1; i++) {
+    if (A[i] > A[i+1]) {
+      swap = A[i];
+      A[i] = A[i+1];
+      A[i+1] = swap;
+      t = i + 1;
+    }
+  } // i = bound-1 and the elements @~$A[bound\dots n-1]$~@ are in non-decreasing order and $A[i] \leq A[bound]$~@
+  bound = t;
+} // bound = 0 and the elements @~$A[0\dots n-1]$~@ are in non-decreasing order
+\end{lstlisting}
+{\bf Postcondition:} $A[0] \le A[1] \le \dots \le A[n-1]$
+
+\item \mmap{state}(\nterm{var} \peq \nterm{expression}, S) = \begin{lstlisting}
+{
+    // test that @~\nterm{var}~@ is a legal name in the language
+    if @~\mmap{name}(\nterm{var}~@) = @~`Error'~@
+        return @~`Error'~@
+   
+    // test that @~\nterm{var}~@ has already been declared
+    if @~\fmap{Lookup}(\mmap{name}(\nterm{var}), $S$~@) = @~`Error'~@
+        return @~`Error'~@
+
+    // calculate the value of @~\nterm{expression}~@ using the old state
+    @~$V$~@ = @~\mmap{value}(\nterm{expression}, $S$~@)
+    if @~$V$~@ = @~`Error'~@
+        return @~`Error'~@
+   
+    // calculate a new state including any side effects from evaluating @~\nterm{expression}~@
+    @~$S_1$~@ = @~\mmap{state}(\nterm{expression}, $S$~@)
+
+    // remove @~\nterm{var}~@ from the new state
+    @~\fmap{Remove}(\mmap{name}(\nterm{var}), $S$~@)
+
+    // return the new state with the updated value of @~\nterm{var}~@ added
+    return @~\fmap{Add}(\mmap{name}(\nterm{var}), $V$, $S_1$~@)
+             
+}
+\end{lstlisting}
+
+
+\mmap{state}(if \nterm{condition} then \ntermn{statement}{1} else \ntermn{statement}{2}, S) = \begin{lstlisting}
+{
+    @~$S_1$~@ = @~\mmap{state}(\nterm{condition}, $S$)~@
+    
+    if @~\mmap{boolean}(\nterm{condition}, $S_1$~@) = true
+        return @~\mmap{state}(\ntermn{statement}{1}, $S_1$~@)
+    else if @~\mmap{boolean}(\nterm{condition}, $S_1$~@) = false 
+        return @~\mmap{state}(\ntermn{statement}{2}, $S_1$~@)
+    else
+        return `Error'
+}
+\end{lstlisting}
+
+
+\mmap{state}(while \nterm{condition} \nterm{loop body}, S) = \begin{lstlisting}
+{
+    @~$S_1$~@ = @~\mmap{state}(\nterm{condition}, $S$)~@
+    
+    if @~\mmap{boolean}(\nterm{condition}, $S_1$~@) = true
+        return @~\mmap{state}~@(while @~\nterm{condition} \nterm{loop body}, \mmap{state}(\nterm{condition}, $S_1$~@))
+    else if @~\mmap{boolean}(\nterm{condition}, $S_1$~@) = false 
+        return @~$S_1$~@ 
+    else
+        return `Error'
+}
+\end{lstlisting}
 \end{enumerate}
 \end{document}
