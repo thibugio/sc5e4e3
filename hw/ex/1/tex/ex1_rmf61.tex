@@ -70,13 +70,13 @@ Written Exercise 1\\
 \end{tabular}\\
 
 Attribute Rules:\\
-\begin{longtable}[t]{P{1}}
+%\begin{longtable}[t]{P{1}}
 {\it \ntermn{start}{1} \rarrow \ntermn{stmt}{3} ; \ntermn{start}{3} }\\
 \ntermn{start}{1}.type := \na \\
-\ntermn{start}{1}.typetable(<var>) := \ntermn{stmt}{3}.typetable\\
-\ntermn{start}{1}.inittable(<var>) := \ntermn{stmt}{3}.initvar\\
+\ntermn{start}{1}.typetable(\nterm{var}) := \ntermn{stmt}{3}.typetable\\
+\ntermn{start}{1}.inittable(\nterm{var}) := \ntermn{stmt}{3}.initvar\\
 \ntermn{start}{1}.typebinding := \na\\
-\ntermn{start}{1}.initialized := \na\\\\
+\ntermn{start}{1}.initialized := \na\\
 
 \ntermn{stmt}{3}.type := \na\\
 \ntermn{stmt}{3}.typetable := \ntermn{start}{1}.typetable\\
@@ -92,10 +92,10 @@ Attribute Rules:\\
 
 {\it \ntermn{start}{2} \rarrow \ntermn{stmt}{4}}\\
 \ntermn{start}{2}.type := \na\\
-\ntermn{start}{2}.typetable(<var>) := \es\\
-\ntermn{start}{2}.inittable(<var>) := \es\\
+\ntermn{start}{2}.typetable(\nterm{var}) := \es\\
+\ntermn{start}{2}.inittable(\nterm{var}) := \es\\
 \ntermn{start}{2}.typebinding := \na\\
-\ntermn{start}{2}.initialized := \na\\\\
+\ntermn{start}{2}.initialized := \na\\
 
 \ntermn{stmt}{4}.type := \na\\
 \ntermn{stmt}{4}.typetable := \ntermn{start}{2}.typetable\\
@@ -103,100 +103,159 @@ Attribute Rules:\\
 \ntermn{stmt}{4}.typebinding := \na\\
 \ntermn{stmt}{4}.initialized := \na\\
 
-\ntermn{start}{3}.type := \na\\
 {\it \ntermn{stmt}{1} \rarrow \ntermn{declare}{2}}\\
 \ntermn{stmt}{1}.type := \na\\
-\ntermn{stmt}{1}.typetable(<var>) := \es (inherited from \nterm{start})\\
-\ntermn{stmt}{1}.inittable(<var>) := \es (inherited from \nterm{start})\\
+\ntermn{stmt}{1}.typetable(\nterm{var}) := \nterm{start}.typetable\\
+\ntermn{stmt}{1}.inittable(\nterm{var}) := \nterm{start}.inittable\\
 \ntermn{stmt}{1}.typebinding := \na\\
-\ntermn{stmt}{1}.initialized := \na\\\\
+\ntermn{stmt}{1}.initialized := \na\\
+
+\ntermn{declare}{2}.type := \na\\
+\ntermn{declare}{2}.typetable(\nterm{var}) := \ntermn{stmt}{1}.typetable\\
+\ntermn{declare}{2}.inittable(\nterm{var}) := \ntermn{stmt}{1}.inittable\\
+\ntermn{declare}{2}.typebinding := \na\\
+\ntermn{declare}{2}.initialized := \na\\
 
 {\it \ntermn{stmt}{2} \rarrow \ntermn{assign}{2}}\\
-\ntermn{stmt}{2}.type := \na\\
-\ntermn{stmt}{2}.typetable(<var>) := \es (inherited from \nterm{start})\\
-\ntermn{stmt}{2}.inittable(<var>) := \es (inherited from \nterm{start})\\
+\ntermn{stmt}{2}.type := \na\ (I don't think it makes sense to keep propagating that attribute to this non-terminal (the synthesized attribute type should stop propagating upwards after the non-terminal which uses it to add an entry to the typetable and do error-checking))\\
+\ntermn{stmt}{2}.typetable(\nterm{var}) := \nterm{start}.typetable\\
+\ntermn{stmt}{2}.inittable(\nterm{var}) := \nterm{start}.inittable\\
 \ntermn{stmt}{2}.typebinding := \na\\
-\ntermn{stmt}{2}.initialized := \na\\\\
+\ntermn{stmt}{2}.initialized := \na\\
 
-\ntermn{declare}{1}.type := \\
-\ntermn{declare}{1}.typetable(<var>) := \\
-\ntermn{declare}{1}.inittable(<var>) := \\
-\ntermn{declare}{1}.typebinding := \\
-\ntermn{declare}{1}.initialized := \\\\
+\ntermn{assign}{2}.type := (see \ntermn{assign}{1})\\
+\ntermn{assign}{2}.typetable(\nterm{var}) := \ntermn{stmt}{2}.typetable\\
+\ntermn{assign}{2}.inittable(\nterm{var}) := (\ntermn{stmt}{2}.inittable - {(\mmap{name}(\nterm{var}), false)}) \union {(\mmap{name}(\nterm{var}), true)} 
+(checking would need to be done here to ensure that the entry
+(\mmap{name}(\nterm{var}), false) actually exists)\\
+\ntermn{assign}{2}.typebinding := \na\\
+\ntermn{assign}{2}.initialized := \na\\
 
-\ntermn{type}{1}.type := \\
-\ntermn{type}{1}.typetable(<var>) := \\
-\ntermn{type}{1}.inittable(<var>) := \\
-\ntermn{type}{1}.typebinding := \\
-\ntermn{type}{1}.initialized := \\\\
+{\it \ntermn{declare}{1} \rarrow \ntermn{type}{3} \nterm{var}}\\
+\ntermn{declare}{1}.type := \ntermn{type}{3}.type\\
+\ntermn{declare}{1}.typetable(\nterm{var}) := \nterm{stmt}.typetable \union {(\mmap{name}(\nterm{var}), \ntermn{type}{3}.type)}
+(checking would need to be done here to ensure that \nterm{var} 
+has not already been declared, i.e., the inittable entry 
+for this variable must be (\mmap{name}(\nterm{var}), error))\\
+\ntermn{declare}{1}.inittable(\nterm{var}) := \nterm{stmt}.inittable \union {(\mmap{name}(\nterm{var}), false)}\\
+\ntermn{declare}{1}.typebinding := (\mmap{name}(\nterm{var}), \ntermn{type}{3}.type)\\
+\ntermn{declare}{1}.initialized := \nterm{var}.initialized\\
 
-\ntermn{type}{2}.type := \\
-\ntermn{type}{2}.typetable(<var>) := \\
-\ntermn{type}{2}.inittable(<var>) := \\
-\ntermn{type}{2}.typebinding := \\
-\ntermn{type}{2}.initialized := \\\\
+\ntermn{type}{3}.type := (see \ntermn{type}{1} and \ntermn{type}{2})\\
+\ntermn{type}{3}.typetable(\nterm{var}) := \ntermn{declare}{1}.typetable\\
+\ntermn{type}{3}.inittable(\nterm{var}) := \ntermn{declare}{1}.inittable\\
+\ntermn{type}{3}.typebinding := \na\\
+\ntermn{type}{3}.initialized := \na\\
 
-\ntermn{assign}{1}.type := \\
-\ntermn{assign}{1}.typetable(<var>) := \\
-\ntermn{assign}{1}.inittable(<var>) := \\
-\ntermn{assign}{1}.typebinding := \\
-\ntermn{assign}{1}.initialized := \\\\
+{\it \ntermn{type}{1} \rarrow int}\\
+\ntermn{type}{1}.type := int\\
+\ntermn{type}{1}.typetable(\nterm{var}) := \nterm{declare}.typetable\\
+\ntermn{type}{1}.inittable(\nterm{var}) := \nterm{declare}.inittable\\
+\ntermn{type}{1}.typebinding := \na\\
+\ntermn{type}{1}.initialized := \na\\
 
-\ntermn{expression}{1}.type := \\
-\ntermn{expression}{1}.typetable(<var>) := \\
-\ntermn{expression}{1}.inittable(<var>) := \\
-\ntermn{expression}{1}.typebinding := \\
-\ntermn{expression}{1}.initialized := \\\\
+{\it \ntermn{type}{2} \rarrow double}\\
+\ntermn{type}{2}.type := double\\
+\ntermn{type}{2}.typetable(\nterm{var}) := \nterm{declare}.typetable\\
+\ntermn{type}{2}.inittable(\nterm{var}) := \nterm{declare}.inittable\\
+\ntermn{type}{2}.typebinding := \na\\
+\ntermn{type}{2}.initialized := \na\\
 
-\ntermn{expression}{2}.type := \\
-\ntermn{expression}{2}.typetable(<var>) := \\
-\ntermn{expression}{2}.inittable(<var>) := \\
-\ntermn{expression}{2}.typebinding := \\
-\ntermn{expression}{2}.initialized := \\\\
+{\it \ntermn{assign}{1} \rarrow \nterm{var} \ntermn{expression}{3}}\\
+\ntermn{assign}{1}.type := \nterm{var}.type 
+(checking would need to be done here to ensure that 
+\nterm{var} actually has a type (i.e., it has already been declared), 
+and also to ensure that \nterm{var}.type = <expression>.type)
+\\
+\ntermn{assign}{1}.typetable(\nterm{var}) := \nterm{stmt}.typetable\\
+\ntermn{assign}{1}.inittable(\nterm{var}) := \nterm{stmt}.inittable\\
+\ntermn{assign}{1}.typebinding := \nterm{var}.typebinding\\
+\ntermn{assign}{1}.initialized := (\mmap{name}(\nterm{var}), true)\\
 
-\ntermn{expression}{3}.type := \\
-\ntermn{expression}{3}.typetable(<var>) := \\
-\ntermn{expression}{3}.inittable(<var>) := \\
-\ntermn{expression}{3}.typebinding := \\
-\ntermn{expression}{3}.initialized := \\\\
+\ntermn{expression}{3}.type := (see \ntermn{expression}{1} and \ntermn{expression}{2})\\
+\ntermn{expression}{3}.typetable(\nterm{var}) := \ntermn{assign}{1}.typetable \union \nterm{var}.typetable\\
+\ntermn{expression}{3}.inittable(\nterm{var}) := \ntermn{assign}{1}.inittable \union \nterm{var}.inittable\\
+\ntermn{expression}{3}.typebinding := \ntermn{value}{4}.typebinding 
+(<expression> eventually has to produce <value>; 
+however this attribute only makes sense for <expression> 
+if <value> produces \nterm{var} (rather than <integer> or <float>))\\
+\ntermn{expression}{3}.initialized := \ntermn{value}{4}.initialized\\
 
-\ntermn{expression}{4}.type := \\
-\ntermn{expression}{4}.typetable(<var>) := \\
-\ntermn{expression}{4}.inittable(<var>) := \\
-\ntermn{expression}{4}.typebinding := \\
-\ntermn{expression}{4}.initialized := \\\\
+{\it \ntermn{expression}{1} \rarrow \ntermn{expression}{4} \nterm{op} \ntermn{expression}{5}} \\
+\ntermn{expression}{1}.type := \begin{lstlisting}
+    switch (<op>):
+        case +:
+        case -:
+            if <expression4>.type = float || <expression5>.type = float
+                <expression1>.type = float
+            else 
+                <expression1>.type = int
+            break;
+        case *:
+        case /:
+            <expression1>.type = float
+    \end{lstlisting}
+\ntermn{expression}{1}.typetable(\nterm{var}) := \nterm{assign}.typetable\\
+\ntermn{expression}{1}.inittable(\nterm{var}) := \nterm{assign}.inittable\\
+\ntermn{expression}{1}.typebinding := \na\\
+\ntermn{expression}{1}.initialized := \na\\
 
-\ntermn{expression}{5}.type := \\
-\ntermn{expression}{5}.typetable(<var>) := \\
-\ntermn{expression}{5}.inittable(<var>) := \\
-\ntermn{expression}{5}.typebinding := \\
-\ntermn{expression}{5}.initialized := \\\\
+\ntermn{expression}{4}.type := (see \ntermn{expression}{1} and \ntermn{expression}{2})\\
+\ntermn{expression}{4}.typetable(\nterm{var}) := \ntermn{expression}{1}.typetable\\
+\ntermn{expression}{4}.inittable(\nterm{var}) := \ntermn{expression}{1}.inittable\\
+\ntermn{expression}{4}.typebinding := (see \ntermn{expression}{2} and comment for \ntermn{expression}{3})\\
+\ntermn{expression}{4}.initialized := (see \ntermn{expression}{2} and comment for \ntermn{expression}{3})\\
 
-\ntermn{value}{1}.type := \\
-\ntermn{value}{1}.typetable(<var>) := \\
-\ntermn{value}{1}.inittable(<var>) := \\
-\ntermn{value}{1}.typebinding := \\
-\ntermn{value}{1}.initialized := \\\\
+\ntermn{expression}{5}.type := (see \ntermn{expression}{1} and \ntermn{expression}{2})\\
+\ntermn{expression}{5}.typetable(\nterm{var}) := \ntermn{expression}{1}.typetable \union \nterm{op}.typetable\\
+\ntermn{expression}{5}.inittable(\nterm{var}) := \ntermn{expression}{1}.typetable \union \nterm{op}.inittable\\
+\ntermn{expression}{5}.typebinding := (see \ntermn{expression}{2} and comment for \ntermn{expression}{3})\\
+\ntermn{expression}{5}.initialized := (see \ntermn{expression}{2} and comment for \ntermn{expression}{3})\\
 
-\ntermn{value}{2}.type := \\
-\ntermn{value}{2}.typetable(<var>) := \\
-\ntermn{value}{2}.inittable(<var>) := \\
-\ntermn{value}{2}.typebinding := \\
-\ntermn{value}{2}.initialized := \\\\
+{\it \ntermn{expression}{2} \rarrow \ntermn{value}{4}}\\
+\ntermn{expression}{2}.type := \ntermn{value}{4}.type\\
+\ntermn{expression}{2}.typetable := \begin{lstlisting}
+if produced by <assign1>:
+    <expression2>.typetable := <assign1>.typetable \union \nterm{var}.typetable
+elif produced by <expression1>:
+    if <expression2> is <expression4>:
+        <expression2>.typetable := <expression1>.typetable
+    elif <expression2> is <expression5>:
+        <expression2>.typtable := <expression1>.typetable \union <op>.typetable
+\end{lstlisting}
+\ntermn{expression}{2}.inittable := (same rules as typetable)\\
+\ntermn{expression}{2}.typebinding := \ntermn{value}{4}.typebinding\\
+\ntermn{expression}{2}.initialized := \ntermn{value}{4}.initalized\\
 
-\ntermn{value}{3}.type := \\
-\ntermn{value}{3}.typetable(<var>) := \\
-\ntermn{value}{3}.inittable(<var>) := \\
-\ntermn{value}{3}.typebinding := \\
-\ntermn{value}{3}.initialized := \\
+\ntermn{value}{4}.type := (see \ntermn{value}{1}, \ntermn{value}{2}, and \ntermn{value}{3})\\
+\ntermn{value}{4}.typetable(\nterm{var}) := \ntermn{expression}{3}.typetable\\
+\ntermn{value}{4}.inittable(\nterm{var}) := \ntermn{expression}{3}.inittable\\
+\ntermn{value}{4}.typebinding := (see \ntermn{value}{1})\\
+\ntermn{value}{4}.initialized := (see \ntermn{value}{1})\\
 
-\ntermn{value}{4}.type := \\
-\ntermn{value}{4}.typetable(<var>) := \\
-\ntermn{value}{4}.inittable(<var>) := \\
-\ntermn{value}{4}.typebinding := \\
-\ntermn{value}{4}.initialized := \\
-\caption{Attribute Rules}
-\end{longtable}
+{\it \ntermn{value}{1} \rarrow \nterm{var}}\\
+\ntermn{value}{1}.type := \nterm{var}.type\\
+\ntermn{value}{1}.typetable(\nterm{var}) := \nterm{expression}.typetable\\
+\ntermn{value}{1}.inittable(\nterm{var}) := \nterm{expression}.inittable\\
+\ntermn{value}{1}.typebinding := \nterm{var}.typebinding\\
+\ntermn{value}{1}.initialized := \nterm{var}.initialized\\
+
+{\it \ntermn{value}{2} \rarrow \nterm{integer}}\\
+\ntermn{value}{2}.type := \nterm{integer}.type\\
+\ntermn{value}{2}.typetable(\nterm{var}) := \nterm{expression}.typetable\\
+\ntermn{value}{2}.inittable(\nterm{var}) := \nterm{expression}.inittable\\
+\ntermn{value}{2}.typebinding := \na\\
+\ntermn{value}{2}.initialized := \na\\
+
+{\it \ntermn{value}{3} \rarrow \nterm{float}}\\
+\ntermn{value}{3}.type := \nterm{float}.type\\
+\ntermn{value}{3}.typetable(\nterm{var}) := \nterm{expression}.typetable\\
+\ntermn{value}{3}.inittable(\nterm{var}) := \nterm{expression}.inittable\\
+\ntermn{value}{3}.typebinding := \na\\
+\ntermn{value}{3}.initialized := \na\\
+
+%\caption{Attribute Rules}
+%\end{longtable}
 
 \item \begin{enumerate}
     \renewcommand\theenumiii{\arabic{enumiii}}
