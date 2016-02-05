@@ -154,6 +154,24 @@ Attribute Rules:\\
 \ntermn{expression}{2}.typebinding := \\
 \ntermn{expression}{2}.initialized := \\\\
 
+\ntermn{expression}{3}.type := \\
+\ntermn{expression}{3}.typetable(<var>) := \\
+\ntermn{expression}{3}.inittable(<var>) := \\
+\ntermn{expression}{3}.typebinding := \\
+\ntermn{expression}{3}.initialized := \\\\
+
+\ntermn{expression}{4}.type := \\
+\ntermn{expression}{4}.typetable(<var>) := \\
+\ntermn{expression}{4}.inittable(<var>) := \\
+\ntermn{expression}{4}.typebinding := \\
+\ntermn{expression}{4}.initialized := \\\\
+
+\ntermn{expression}{5}.type := \\
+\ntermn{expression}{5}.typetable(<var>) := \\
+\ntermn{expression}{5}.inittable(<var>) := \\
+\ntermn{expression}{5}.typebinding := \\
+\ntermn{expression}{5}.initialized := \\\\
+
 \ntermn{value}{1}.type := \\
 \ntermn{value}{1}.typetable(<var>) := \\
 \ntermn{value}{1}.inittable(<var>) := \\
@@ -171,10 +189,28 @@ Attribute Rules:\\
 \ntermn{value}{3}.inittable(<var>) := \\
 \ntermn{value}{3}.typebinding := \\
 \ntermn{value}{3}.initialized := \\
+
+\ntermn{value}{4}.type := \\
+\ntermn{value}{4}.typetable(<var>) := \\
+\ntermn{value}{4}.inittable(<var>) := \\
+\ntermn{value}{4}.typebinding := \\
+\ntermn{value}{4}.initialized := \\
 \caption{Attribute Rules}
 \end{longtable}
 
-\item asdf
+\item \begin{enumerate}
+    \renewcommand\theenumiii{\arabic{enumiii}}
+    \item `The type of the expression must match the type of the variable in all assignment statements'\\ \begin{enumerate}
+        \item \ntermn{assign}{1}: \nterm{var}.type = \ntermn{expression}{3}.type
+        %\item \ntermn{expression}{1}: \ntermn{expression}{4}.type = \ntermn{expression}{5}.type
+        \end{enumerate}
+    \item `A variable must be declared before it is used'\\ \begin{enumerate}
+        \item \ntermn{assign}{1}: \nterm{var}.typetable != `Error'
+        \end{enumerate}
+    \item `A variable must be assigned a value as its first use in the program'\\ \begin{enumerate}
+        \item \ntermn{assign}{1}: if \nterm{var}.inittable = `Error' %expression->value->var
+        \end{enumerate}
+    \end{enumerate}
 \item Loop Invariants: 
     \begin{description}
     \item [Outer (while) Loop Goal:] The elements $A[0\dots n-1]$ are sorted in non-decreasing order
@@ -291,7 +327,8 @@ while (bound > 0) {
     @~$S_1$~@ = @~\mmap{state}(\nterm{condition}, $S$)~@
     
     if @~\mmap{boolean}(\nterm{condition}, $S_1$~@) = true
-        return @~\mmap{state}~@(while @~\nterm{condition} \nterm{loop body}, \mmap{state}(\nterm{condition}, $S_1$~@))
+        // evaluate the loop body and call the while-loop again
+        return @~\mmap{state}~@(while @~\nterm{condition} \nterm{loop body}, \mmap{state}(\nterm{loop body}, $S_1$~@))
     else if @~\mmap{boolean}(\nterm{condition}, $S_1$~@) = false 
         return @~$S_1$~@ 
     else
