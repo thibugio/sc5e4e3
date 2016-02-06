@@ -1,0 +1,27 @@
+#lang racket
+; recursive removeAll
+; remove all occurrences of a given element from a list
+(define removeAll
+  (lambda (a l)
+    (cond
+      ((null? l) l)
+      ((null? (car l)) l)
+      ((list? (car l)) (cons (removeAll a (car l)) (removeAll a (cdr l))))
+      ((eq? (car l) a) (removeAll a (cdr l)))
+      (else (cons (car l) (removeAll a (cdr l)))))))
+
+; test if two lists are equal in content and structure
+; (eq-list* '(a (v)) '(a (v))) => #t
+; (eq-list* '((a) v) '(a (v))) => #f
+(define eq-list*
+  (lambda (l1 l2)
+    (cond
+      ((null? l1) (null? l2))
+      ((null? l2) #f)
+      ((and (list? (car l1)) (list? (car l2))) (and (eq-list* (car l1) (car l2))
+                                                    (eq-list* (cdr l1) (cdr l2))))
+      ((or (list? (car l1)) (list? (car l2))) #f)
+      (else (and (eq? (car l1) (car l2))
+                 (eq-list* (cdr l1) (cdr l2)))))))
+      
+    
