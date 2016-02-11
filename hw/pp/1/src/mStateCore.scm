@@ -59,6 +59,15 @@
     (lambda (variable state)
         (cond
             ((eq? state empty-state) #f)
-            (else (or (eq? variable (state-peek-var state))
-                       (state-lookup? variable (state-pop state)))))))
+            ((eq? variable (state-peek-var state)) #t)
+            (else (state-lookup? variable (state-pop state))))))
+
+; find the value associated with a variable in the state
+; return the value of the variable, or an error condition if the variable cannot be found
+(define state-get-value
+    (lambda (variable state)
+        (cond
+            ((eq? state empty-state) (error 'Unknown "Variable not in State"))
+            ((eq? variable (state-peek-var state)) (state-peek-val state))
+            (else (state-get-value variable (state-pop state))))))
 

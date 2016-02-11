@@ -1,4 +1,9 @@
 ; collection of functions used for M_state
+(load "mStateCore.scm")
+
+(define get-operator car)
+(define get-operand1 cadr)
+(define get-operand2 caddr)
 
 ; M_state function
 ; takes a statment and a state and updates the state by evaluating the statement

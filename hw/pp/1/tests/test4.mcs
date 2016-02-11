@@ -1,0 +1,4 @@
+;Test 4: This code should return 16.
+
+var x = (5 * 7 - 3) / 2;
+return x;

@@ -1,0 +1,6 @@
+;Test 13: This code should give an error (using before assigning).
+
+var x;
+var y;
+x = x + y;
+return x;

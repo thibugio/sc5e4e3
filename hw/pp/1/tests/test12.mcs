@@ -1,0 +1,5 @@
+;Test 12: This code should give an error (using before declaring).
+
+var y;
+y = x;
+return y;

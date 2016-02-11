@@ -1,0 +1,5 @@
+;Test 3: This code should return 10.
+
+var z;
+z = 10;
+return z;
