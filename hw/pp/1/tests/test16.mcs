@@ -1,4 +1,4 @@
-;Test 16: This code should return 100.
+#Test 16: This code should return 100.#
 
 var x = 10;
 var y = 20;

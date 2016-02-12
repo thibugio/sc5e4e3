@@ -5,6 +5,7 @@
 ; and the second sublist records the value of the declared variables (in-order element-wise correspondence)
 
 (define empty-state '())
+(define varInitVal 'Undefined)
 
 ; return the first variable in the state
 (define state-peek-var caar)

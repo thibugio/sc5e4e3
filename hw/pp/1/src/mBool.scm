@@ -23,7 +23,7 @@
                                                         (m-bool (get-operand2 condition) state)))
             ((eq? '||    (get-operator condition)) (or (m-bool (get-operand1 condition) state)
                                                        (m-bool (get-operand2 condition) state)))
-            ((eq? '!     (get-operator condition)) (not (m-bool (get-operand1 condition) state)))
+            ((eq? '!     (get-operator condition)) (not (m-bool (get-operand1 condition) state))))))
         
 
 (define get-operator car)

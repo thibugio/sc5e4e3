@@ -1,4 +1,4 @@
-;Test 14: This code should give an error (redefining). This is not a required error, but it would be nice if you could catch these.
+#Test 14: This code should give an error (redefining). This is not a required error, but it would be nice if you could catch these.#
 
 var x = 10;
 var y = 20;

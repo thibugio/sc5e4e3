@@ -1,4 +1,4 @@
-;Test 17: This code should return false (not #f).
+#Test 17: This code should return false (not f).#
 
 var x = 100 % 2 == 0;
 var y = 10 >= 20;

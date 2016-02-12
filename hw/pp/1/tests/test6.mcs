@@ -1,4 +1,4 @@
-;Test 6: This code should return 5.
+#Test 6: This code should return 5.#
 
 var x = 5;
 var y = 6;

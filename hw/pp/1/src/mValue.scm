@@ -20,5 +20,5 @@
             ((eq? '% (get-operator statement)) (remainder (m-value (get-operand1 statement) state) 
                                                           (m-value (get-operand2 statement) state)))
             ;((eq? '= (get-operator statement)) (m-value (get-operand2 statement statement) state))
-            ((number? (state-get-value statement state)) (state-get-value statement state))
-            (else (error 'Unknown "Mvalue: Unknown statement"))
+            ((number? (state-get-value statement state)) (state-get-value statement state)) ;boolean value, or 'Undefined
+            (else (error 'Unknown "Mvalue: Unknown statement")))))

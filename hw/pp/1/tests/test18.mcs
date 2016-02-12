@@ -1,4 +1,4 @@
-;Test 18: This code should return true.
+#Test 18: This code should return true.#
 
 var x = 10;
 var y = 20;

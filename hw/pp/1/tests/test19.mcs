@@ -1,4 +1,4 @@
-;Test 19: This code should return 128.
+#Test 19: This code should return 128.#
 
 var x = 2;
 while (x < 100)

@@ -1,4 +1,4 @@
-;Test 11: This code should give an error (using before declaring).
+#Test 11: This code should give an error (using before declaring).#
 
 var x = 1;
 y = 10 + x;
