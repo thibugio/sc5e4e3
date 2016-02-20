@@ -1,0 +1,13 @@
+  ("(define mycont 0)")
+   ("(+ 100 (call/cc (lambda (break) (begin (set! mycont break) 50))))")
+   ("mycont")
+   ("(mycont 4)")
+   ("(* 500 (+ 10 (mycont 1)))")
+   ("\"throws away the call stack and returns '1' to the continuation spot\"")
+   ("(* 500 (+ (mycont 1) 10))")
+   ("(* 500 (+ (mycont (* 3 (mycont 4))) (mycont 7)))")
+   ("\"calls the continuation twice\"")
+   ("(define h 10)")
+   ("(mycont h)")
+   ("h")
+

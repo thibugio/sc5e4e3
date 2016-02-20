@@ -3,9 +3,6 @@
 ; Programming Exercise 2
 ; 02/21/2015
 
-; todo:
-; suffix
-; suffix2
 
 ; dotproduct takes a two vectors (lists of numbers) and computes the dot product
 ; of the vectors. If one list is longer than the other, you can ignore the extra
@@ -146,8 +143,37 @@
       (else (removesubsequence*-cps lat (cdr l) (lambda (v1 v2) (return v1 (cons (car l) v2))))))))
 
 
+; Write the following function without external helper functions or additional
+; parameters. You may use letrec to create an internal helper function that uses
+; continuation passing style.
 ; The function suffix takes an atom and a list and returns a list containing all
 ; elements that occur after the last occurrence of the atom.
-
 (define suffix
-  (lambda (a l) ))
+  (lambda (a l)
+    (letrec (
+             (suffix-cps (lambda (a l return break)
+                           (cond
+                             ((null? l) (return '()))
+                             ((eq? a (car l)) (break (cdr l)))
+                             (else (suffix-cps a (cdr l) (lambda (v) (cons (car l) v)) break)))))
+             (suffix-cc (lambda (a l)
+                          (call-with-current-continuation
+                           (lambda (break)
+                             (suffix-cps a l (lambda (v) v) (lambda (v) (suffix-cc a v))))))))
+             (suffix-cc a l)
+             )))
+
+
+; Write a second version of suffix that uses call/cc instead of the "normal"
+; continuation passing style. You may not use external helper functions or
+; additional parameters, but you may use letrec.
+(define suffix2
+  (lambda (a l)
+    (call/cc
+     (lambda (break)
+       (letrec ((suffix-cps (lambda (a l return break)
+                              (cond
+                                ((null? l) (return '()))
+                                ((eq? a (car l)) (break (cdr l)))
+                                (else (suffix-cps a (cdr l) (lambda (v) (cons (car l) v)) break))))))
+         (suffix-cps a l (lambda (v) v) (lambda (v) (suffix2 a v))))))))

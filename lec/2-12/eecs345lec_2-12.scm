@@ -14,7 +14,7 @@
     ; when break is called, jump right to this spot
     (call-with-current-continuation ;pass the continuation as input to this function
      (lambda (break)
-       (multiply l break)))))
+       (multiply-cps l (lambda (v) v) break)))))
 
 (define multiply
   (lambda (l break)
