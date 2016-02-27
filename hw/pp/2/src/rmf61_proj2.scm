@@ -124,7 +124,6 @@
 
 ; main Mstate function
 ; takes a statment and a state and updates the state by evaluating the statement
-; we can assume that the statement will not be empty
 (define m-state
     (lambda (statement state)
         (cond
@@ -140,21 +139,41 @@
             ((eq? 'try (get-operator statement)) (m-state-tcf statement state))
             (else state))))
 
+
+; denotational semantics for (break):
+; Mstate(break-continuation, S) = {
+;   (break-continuation S)
+; }
 (define m-state-break
-  (lambda (statement state)
-    ))
+  (lambda (statement state break)
+    (break state))) ; ok unless there are side effects
 
 (define m-state-continue
-  (lambda (statement state)
-    ))
+  (lambda (statement state continuation)
+    (continuation state)))
 
-(define m-state throw
-  (lambda (statement state)
-    ))
+(define m-state-throw
+  (lambda (statement state continuation)
+    (continuation (exception statement) state)))
+(define exception cadr)
 
 (define m-state-tcf
   (lambda (statement state)
-    ))
+    (if (null? (finally-body statement))
+        (m-state-try (try-body statement) (catch-err statement) (catch-body statement) state)
+        (m-state (finally-body) (m-state-try (try-body statement) (catch-err statement) (catch-body statement) state)))))
+; m-state-try:
+;   *need to know if error has been thrown, and if so, execute catch-body with last state
+;    -how to return both an error and a state from m-state-throw?
+;    -save error as a 1/0 variable in the state and check its value after m-state(try-body) returns?
+      
+; (try body (catch (e) body) (finally body))
+(define try-body cadr)
+(define catch-body (lambda (t) (if (null? (cddr (caddr t)))
+                                   '()
+                                   (car (cddr (caddr t))))))
+(define catch-err (lambda (t) (car (cadr (caddr t)))))
+(define finally-body (lambda (t) (cadr (car (cdddr t)))))
 
 (define m-state-begin-scope
   (lambda (statement state)
@@ -243,13 +262,25 @@
 ;   else
 ;     Mstate(<cond>, S)
 ; }
+;(define m-state-while
+;  (lambda (statement state)
+;    (if (m-bool (while-cond statement) (m-state (while-cond statement) state))
+;        (m-state-while statement (m-state (while-stmt statement) (m-state (while-cond statement) state)))
+;        (m-state (while-cond statement) state))))
 (define m-state-while
   (lambda (statement state)
-    (if (m-bool (while-cond statement) (m-state (while-cond statement) state))
-        (m-state-while statement (m-state (while-stmt statement) (m-state (while-cond statement) state)))
-        (m-state (while-cond statement) state))))
+    (call/cc
+     (lambda (break)
+       (m-state-loop statement state (break state))))))
 (define while-cond cadr)
 (define while-stmt caddr)
+
+; Mstate function for loops, takes a break continuation function as additional input
+(define m-state-loop
+  (lambda (statement state break)
+    (if (m-bool (while-cond statement) (m-state (while-cond statement) state))
+        (m-state-loop statement (m-state (while-stmt statement) (m-state (while-cond statement) state)) break)
+        (m-state (while-cond statement) state))))
 
 ; denotational semantics of variable-declaration option 1
 ; Mstate(var <variable> (<value>), S) = {
