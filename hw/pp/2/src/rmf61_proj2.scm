@@ -23,7 +23,9 @@
             s
             (run-state (cdr t) (m-state (car t) s)))))
 
+
 (define empty-state '())
+(define empty-scope-state '(()()))
 (define varInitVal 'Undefined)
 (define progRetVal '$v0)
 
@@ -43,12 +45,22 @@
 ; the second inner list records the value of the declared variables (in-order correspondence),
 ; and the outer list represents scope
 
+; check if scope-state is equal to empty-scope-state, since (eq? '(()) '(())) => #f
+(define empty-scope-state? (lambda (s) (null? (car s))))
+(define empty-state? (lambda (s) (null? s)))
+
 ; return the first scope in the state ( ->( (x,y,z) (1,2,3) )  ( (q,r,s) (4,5,6) )  )
-(define state-peek-scope car)
+(define state-peek-scope (lambda (s) (if (empty-state? s)
+                                         (error 'state-peek-scope "empty state") ; for debugging
+                                         (car s))))
 ; return the first variable in the state
-(define state-peek-var (lambda (s) (caar (state-peek-scope s))))
+(define state-peek-var (lambda (s) (cond ((empty-state? s) (error 'state-peek-scope "empty state"))
+                                         ((empty-scope-state? (state-peek-scope s)) '())
+                                         (else (caar (state-peek-scope s))))))
 ; return the first value in the state
-(define state-peek-val (lambda (s) (caadr (state-peek-scope s))))
+(define state-peek-val (lambda (s) (cond ((empty-state? s) (error 'state-peek-scope "empty state"))
+                                         ((empty-scope-state? (state-peek-scope s)) '())
+                                         (else (caadr (state-peek-scope s))))))
 
 ; return all but the first scope in the state
 (define state-rest-scope cdr) ; (cons empty-state '()) in null case?
@@ -63,11 +75,13 @@
 (define state-all-vals (lambda (s) (cadr (state-peek-scope s))))
 
 ; remove the first (variable, value) in the first scope of the state and return the new state
+; should NOT pop the scope!
 (define state-pop-binding 
     (lambda (state)
         (cond
-            ((eq? state empty-state) empty-state)
-            ((null? (state-rest-vars state)) (state-rest-scope state))
+            ((empty-state? state) state)
+            ((empty-scope-state? (state-peek-scope state)) state)
+            ;((null? (state-rest-vars state)) (state-rest-scope state))
             (else (cons (cons (state-rest-vars state)
                               (cons (state-rest-vals state) '()))
                         (state-rest-scope state))))))
@@ -75,47 +89,66 @@
 ; add a new (variable, value) to the first scope of the state and return the new state
 (define state-push-binding 
     (lambda (variable value state)
-        (cond 
-            ((eq? state empty-state) (cons (cons (cons variable '()) (cons (cons value '()) '())) '()))
+        (cond
+            ((empty-state? state) (state-push-binding variable value (state-push-scope state)))
             (else (cons (cons (cons variable (state-all-vars state))
                               (cons (cons value (state-all-vals state)) '()))
                         (state-rest-scope state))))))
 
 ; add a new scope to the state and return the new state
-(define state-add-scope
+(define state-push-scope
   (lambda (state)
-    (cons '() state)))
+    (cons empty-scope-state state)))
+
+; remove the top scope from the state and return the new state
+; same as state-rest-scope with error handling
+(define state-pop-scope
+  (lambda (state)
+    (if (empty-state? state)
+        (error 'state-pop-scope "state is empty")
+        (cdr state))))
 
 ; add a variable binding to the first scope of the state and return the new state
 (define state-add-binding
     (lambda (variable value state)    
         (cond
-            ((state-lookup? variable state) (state-add-binding variable value (state-rem-binding variable state)))
+            ((state-lookup-inscope? variable state) (state-push-binding variable value (state-rem-binding variable state)))
             (else (state-push-binding variable value state)))))
 
 ; remove a variable binding from the first scope of the state and return the new state
 (define state-rem-binding
     (lambda (variable state)
         (cond
-            ((eq? state empty-state) empty-state)
+            ((empty-state? state) empty-state)
             ((eq? variable (state-peek-var state)) (state-pop-binding state))
             (else (state-add-binding (state-peek-var state) (state-peek-val state) (state-rem-binding variable (state-pop-binding state)))))))
 
-; check whether a given variable is already recorded in the state
+; check whether a variable is already recorded in the first scope of the state
 ; return true/false
-(define state-lookup?
+(define state-lookup-inscope?
     (lambda (variable state)
         (cond
-            ((eq? state empty-state) #f)
+            ((empty-state? state) #f)
+            ((empty-scope-state? (state-peek-scope state)) #f)
             ((eq? variable (state-peek-var state)) #t)
-            (else (state-lookup? variable (state-pop-binding state))))))
+            (else (state-lookup-inscope? variable (state-pop-binding state))))))
+
+; check whether a variable is recorded in any scope of the state (starting with inner-most scope)
+(define state-lookup?
+  (lambda (variable state)
+    (cond
+      ((empty-state? state) #f)
+      ((empty-scope-state? (state-peek-scope state)) (state-lookup? variable (state-pop-scope state)))
+      ((eq? variable (state-peek-var state)) #t)
+      (else (state-lookup? variable (state-pop-binding state))))))
 
 ; find the value associated with a variable in the state (starting with inner-most scope)
 ; return the value of the variable, or an error condition if the variable cannot be found
 (define state-get-value
     (lambda (variable state)
         (cond
-            ((eq? state empty-state) (error 'state-get-value "Variable not in State"))
+            ((empty-state? state) (error 'state-get-value "Variable not in State"))
+            ((empty-scope-state? (state-peek-scope state)) (state-get-value variable (state-pop-scope state)))
             ((eq? variable (state-peek-var state)) (state-peek-val state))
             (else (state-get-value variable (state-pop-binding state))))))
 
@@ -177,7 +210,8 @@
 
 (define m-state-begin-scope
   (lambda (statement state)
-    (m-state (cdr statement) (state-add-scope state))))
+    (run-state (cdr statement) (state-push-scope state))))
+    ;(m-state (cdr statement) (state-push-scope state))))
     
 ; denotational semantics of variable-assignment
 ; Mstate ('= variable expression', state) = {
@@ -187,12 +221,17 @@
 ;           error: 'variable has not been declared'
 ; }
 (define m-state-assign
-    (lambda (statement state)
-        (if (state-lookup? (assign-var statement) state)
-           (state-add-binding (assign-var statement)
-                      (m-value (assign-expr statement) state)
-                      (state-rem-binding (assign-var statement) state))
-           (error 'Mstate_assign  "variable has not been declared"))))
+  (lambda (statement state)
+    (cond
+      ((not (state-lookup? (assign-var statement) state)) (error 'Mstate_assign "variable has not been declared"))
+      (else (letrec ((original-state state)
+                     (loop (lambda (statement state return)
+                             (if (state-lookup-inscope? (assign-var statement) state)
+                                 (return (state-add-binding (assign-var statement)
+                                                            (m-value (assign-expr statement) original-state)
+                                                            (state-rem-binding (assign-var statement) state)))
+                                 (loop statement (state-pop-scope state) (lambda (v) (return (cons (state-peek-scope state) v))))))))
+              (loop statement state (lambda (v) v)))))))
 (define assign-var cadr)
 (define assign-expr caddr)
 
@@ -294,7 +333,7 @@
 (define m-state-var
     (lambda (statement state)
       (cond
-        ((state-lookup? (var-var statement) state) (error 'Mstate_var "Variable already declared"))
+        ((state-lookup-inscope? (var-var statement) state) (error 'Mstate_var "Variable already declared"))
         ((eq? 2 (len statement)) (state-add-binding (var-var statement) varInitVal state)) ; var <variable>;
         ((and (list? (var-value statement))
                  (or (bool-op? (get-operator (var-value statement)))
@@ -339,7 +378,7 @@
           ((number? condition) (error 'Mbool "Type Error: Number != Boolean"))
           ((eq? 'true condition) #t)
           ((eq? 'false condition) #f)
-          ((state-lookup? condition state) (m-bool (state-get-value condition state) state))
+          ((state-lookup-inscope? condition state) (m-bool (state-get-value condition state) state))
           (else (error 'Mbool "Unknown atom"))))))
         
 ;========================================
@@ -367,7 +406,7 @@
             ((number? statement) statement)
             ((eq? varInitVal statement) (error 'Mvalue "Variable undefined"))
             ((or (eq? 'true statement) (eq? 'false statement)) statement) ;this technically violates the method signature...
-            ((state-lookup? statement state) (m-value (state-get-value statement state)))
+            ((state-lookup? statement state) (m-value (state-get-value statement state) state))
             (else (error 'Mvalue "Variable not declared"))))))
 
 ;===================================
@@ -375,7 +414,7 @@
 
 (define m-name
     (lambda (variable state)
-        (if (state-lookup? variable state)
+        (if (state-lookup-inscope? variable state)
             variable
             (error 'Mname "Variable not found in the state"))))
 

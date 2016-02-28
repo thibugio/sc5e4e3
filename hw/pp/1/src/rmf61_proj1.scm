@@ -228,7 +228,7 @@
             ((number? statement) statement)
             ((eq? varInitVal statement) (error 'Mvalue "Variable undefined"))
             ((or (eq? 'true statement) (eq? 'false statement)) statement) ;this technically violates the method signature...
-            ((state-lookup? statement state) (m-value (state-get-value statement state)))
+            ((state-lookup? statement state) (m-value (state-get-value statement state) state))
             (else (error 'Mvalue "Variable not declared"))))))
 
 ;===================================
