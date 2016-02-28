@@ -210,7 +210,7 @@
 
 (define m-state-begin-scope
   (lambda (statement state)
-    (run-state (cdr statement) (state-push-scope state))))
+    (state-pop-scope (run-state (cdr statement) (state-push-scope state)))))
     ;(m-state (cdr statement) (state-push-scope state))))
     
 ; denotational semantics of variable-assignment
