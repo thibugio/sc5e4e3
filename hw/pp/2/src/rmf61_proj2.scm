@@ -166,20 +166,26 @@
             ((eq? 'while (get-operator statement)) (m-state-while statement state))
             ((eq? 'return (get-operator statement)) (m-state-return statement state))
             ((eq? 'begin (get-operator statement)) (m-state-begin-scope statement state))
-            ((eq? 'break (get-operator statement)) (m-state-break statement state))
-            ((eq? 'continue (get-operator statement)) (m-state-continue statement state))
+            ((eq? 'break (get-operator statement)) (error 'Mstate "cannot have 'break' outside of loop"))
+            ((eq? 'continue (get-operator statement)) (error 'Mstate "cannot have 'continue' outside of loop"))
             ((eq? 'throw (get-operator statement)) (m-state-throw statement state))
             ((eq? 'try (get-operator statement)) (m-state-tcf statement state))
             (else state))))
 
-
-; denotational semantics for (break):
-; Mstate(break-continuation, S) = {
-;   (break-continuation S)
-; }
-(define m-state-break
+(define m-state-loop-stmt
   (lambda (statement state break)
-    (break state))) ; ok unless there are side effects
+    (cond
+      ((eq? 'var (get-operator statement)) (m-state-var statement state))
+      ((eq? '= (get-operator statement)) (m-state-assign statement state))
+      ((eq? 'if (get-operator statement)) (m-state-if statement state))
+      ((eq? 'while (get-operator statement)) (m-state-while statement state))
+      ((eq? 'return (get-operator statement)) (m-state-return statement state))
+      ((eq? 'begin (get-operator statement)) (m-state-begin-scope statement state))
+      ((eq? 'break (get-operator statement)) (break state)) ; no side effects or labels
+      ((eq? 'continue (get-operator statement)) (state)) ; no side effects
+      ((eq? 'throw (get-operator statement)) (m-state-throw statement state))
+      ((eq? 'try (get-operator statement)) (m-state-tcf statement state))
+      (else state))))
 
 (define m-state-continue
   (lambda (statement state continuation)
@@ -310,7 +316,7 @@
   (lambda (statement state)
     (call/cc
      (lambda (break)
-       (m-state-loop statement state (break state))))))
+       (m-state-loop statement state break)))))
 (define while-cond cadr)
 (define while-stmt caddr)
 
@@ -318,7 +324,7 @@
 (define m-state-loop
   (lambda (statement state break)
     (if (m-bool (while-cond statement) (m-state (while-cond statement) state))
-        (m-state-loop statement (m-state (while-stmt statement) (m-state (while-cond statement) state)) break)
+        (m-state-loop statement (m-state-loop-stmt (while-stmt statement) (m-state (while-cond statement) state) break) break)
         (m-state (while-cond statement) state))))
 
 ; denotational semantics of variable-declaration option 1
