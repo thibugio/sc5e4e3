@@ -1,4 +1,4 @@
-#Test 7: This code should return 21.#
+#Test 7: This code should return 16.#
 
 var x = 0;
 var result = 1;
