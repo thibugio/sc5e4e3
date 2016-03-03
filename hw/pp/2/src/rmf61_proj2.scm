@@ -216,7 +216,18 @@
 ; a new block of code. pop the scope when finished executing.
 (define m-state-begin-scope
   (lambda (statement state break continue throw prog-return)
-    (state-pop-scope (run-state (cdr statement) (state-push-scope state) break continue throw prog-return))))
+    (state-pop-scope (run-state (cdr statement)
+                                (state-push-scope state)
+                                (lambda (s) (break (state-pop-scope s)))
+                                continue throw prog-return))))
+    ;(call/cc
+    ; (lambda (brk)
+    ;   (let ((begin-scope (lambda ()
+    ;                        (state-pop-scope (run-state (cdr statement)
+    ;                                                    (state-push-scope state)
+    ;                                                    (lambda (s) (brk (state-pop-scope s)))
+    ;                                                    continue throw prog-return)))))
+    ;     (begin-scope))))))             
     
 ; denotational semantics of variable-assignment
 ; Mstate ('= variable expression', state) = {
@@ -324,13 +335,13 @@
     (call/cc
      (lambda (brk)
        (letrec ((loop (lambda (statement state)
-                        (if (m-bool (while-cond statement) (m-state (while-cond statement) state while-break-err while-break-err while-throw-err while-break-err))
+                        (if (m-bool (while-cond statement) state)
                             (loop statement (m-state (while-stmt statement)
-                                                     (m-state (while-cond statement) state while-break-err while-break-err while-throw-err while-break-err)
-                                                     brk
+                                                     state
+                                                     (lambda (s) (brk s))
                                                      (lambda (s) (brk (loop statement s)))
                                                      throw prog-return))
-                            (m-state (while-cond statement) state while-break-err while-break-err while-throw-err while-break-err)))))
+                            state))))
          (loop statement state))))))                            
 (define while-cond cadr)
 (define while-stmt caddr)
