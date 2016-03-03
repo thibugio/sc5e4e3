@@ -13,20 +13,27 @@
 ; returned by parser, and returns the program state 
 (define interpret
     (lambda (f)
-      (call/cc
-       (lambda (prog-return)
-         (let ((do-interpret (lambda ()
-                               (run-state (parser f) empty-state prog-return (lambda (s) s) (lambda (e s) s) prog-return))))
-           (do-interpret))))))
+      (run-state (parser f) empty-state default-brk default-brk (lambda (e s) s) (lambda (s) s))))
 
 ; takes a parse tree 't' and initial state 's' and returns the program state
 ; Formally, a parse tree is a list where each sublist corresponds to a statement.
 (define run-state
-    (lambda (parsetree state break continue throw prog-return)
-      (if (null? parsetree)
+    (lambda (pt state break continue throw prog-return)
+      (if (null? pt)
           state
-          (run-state (cdr parsetree) (m-state (car parsetree) state break continue throw prog-return) break continue throw prog-return))))
+          (run-state (cdr pt)
+                     (m-state (car pt) state break continue throw prog-return)
+                     break continue throw prog-return))))
+      ;(call/cc
+      ; (lambda (b)
+      ;   (letrec ((loop (lambda (pt s)
+      ;                    (if (null? pt)
+      ;                        (b state)
+      ;                        (loop (cdr pt) (m-state (car pt) state break continue throw prog-return))))))
+      ;     (loop parsetree state))))))
 
+; default break/continue continuation
+(define default-brk (lambda (s) (error 'break "Break or Continue outside of while loop")))
 
 (define empty-state '())
 (define empty-scope-state '(()()))
@@ -161,52 +168,65 @@
 
 ; main Mstate function
 ; takes a statment and a state and updates the state by evaluating the statement
-; takes a program-return continuation, and a break continuation (NOTE: need both because if only one
-; break continuation, then e.g., would not be able to distinguish between (break) and (return expr) in
-; if-clause: need to be able to detect the former and exit with error since break illegal in if-clause.
+; takes a program-return continuation, and 'goto'-continuations
 (define m-state
     (lambda (statement state break continue throw prog-return)
         (cond
-            ((eq? 'var (get-operator statement)) (m-state-var statement state break continue throw prog-return))
-            ((eq? '= (get-operator statement)) (m-state-assign statement state break continue throw prog-return))
-            ((eq? 'if (get-operator statement)) (m-state-if statement state break continue throw prog-return))
-            ((eq? 'while (get-operator statement)) (m-state-while statement state break continue throw prog-return))
-            ((eq? 'return (get-operator statement)) (m-state-return statement state break continue throw prog-return))
-            ((eq? 'begin (get-operator statement)) (m-state-begin-scope statement state break continue throw prog-return))
-            ((eq? 'break (get-operator statement)) (m-state-break statement state break continue throw prog-return))
-            ((eq? 'continue (get-operator statement)) (m-state-continue statement state break continue throw prog-return))
-            ((eq? 'throw (get-operator statement)) (m-state-throw statement state break continue throw prog-return))
-            ((eq? 'try (get-operator statement)) (m-state-tcf statement state break continue throw prog-return))
-            (else state)))) ; (break state)? what was this here for originally in proj1?
+          ((not (list? statement)) state) ;true or false, e.g.
+          ((eq? 'var (get-operator statement)) (m-state-var statement state break continue throw prog-return))
+          ((eq? '= (get-operator statement)) (m-state-assign statement state break continue throw prog-return))
+          ((eq? 'if (get-operator statement)) (m-state-if statement state break continue throw prog-return))
+          ((eq? 'while (get-operator statement)) (m-state-while statement state break continue throw prog-return))
+          ((eq? 'return (get-operator statement)) (m-state-return statement state break continue throw prog-return))
+          ((eq? 'begin (get-operator statement)) (m-state-begin-scope statement state break continue throw prog-return))
+          ((eq? 'break (get-operator statement)) (m-state-break state break))
+          ((eq? 'continue (get-operator statement)) (m-state-continue state continue))
+          ((eq? 'throw (get-operator statement)) (m-state-throw statement state throw))
+          ((eq? 'try (get-operator statement)) (m-state-tcf statement state break continue throw prog-return))
+          (else state))))
 
-(define m-state-break
-  (lambda (statement state break continue throw prog-return)
-    (break state)))
+(define m-state-break (lambda (state break) (break state)))
 
-(define m-state-continue
-  (lambda (statement state break continue throw prog-return)
-    (continue state)))
+(define m-state-continue (lambda (state continue) (continue state)))
 
 (define m-state-throw
-  (lambda (statement state break continue throw prog-return)
+  (lambda (statement state throw)
     (throw (except-stmt statement) state)))
 (define except-stmt cadr)
 
+;(define m-state-tcf
+;  (lambda (statement state break continue throw prog-return)
+;    (call/cc
+;     (lambda (try-break)
+;       (letrec ((finally (lambda (s)
+;                           (if (null? (finally-body statement))
+;                               s
+;                               (m-state (finally-body statement) s break continue throw prog-return))))
+;                (try (lambda (s try-throw)
+;                       (finally (m-state (try-body statement) s break continue try-throw prog-return))))
+;                (catch (lambda (e s)
+;                         (if (eq? e (catch-err statement))
+;                             (finally (m-state (catch-body statement) s break continue throw prog-return))
+;                             (finally s)))))
+;         (try state (lambda (e s) (catch e s))))))))
 (define m-state-tcf
   (lambda (statement state break continue throw prog-return)
-    (call/cc
-     (lambda (try-break)
-       (letrec ((finally (lambda (s)
-                           (if (null? (finally-body statement))
-                               s
-                               (m-state (finally-body statement) s break continue throw prog-return))))
-                (try (lambda (s t)
-                       (finally (m-state (try-body statement) s break continue t prog-return))))
-                (catch (lambda (e s)
-                         (if (eq? e (catch-err statement))
-                             (finally (m-state (catch-body statement) s break continue throw prog-return))
-                             s))))
-         (try state (lambda (e s) (catch e s))))))))      
+    (try statement state break continue (lambda (e s) (catch e statement s break continue throw prog-return)) prog-return)))
+(define try
+  (lambda (statement state break continue throw prog-return)
+    (if (list? (car (try-body statement)))
+        (finally statement (run-state (try-body statement) state break continue throw prog-return) break continue throw prog-return)
+        (finally statement (m-state (try-body statement) state break continue throw prog-return) break continue throw prog-return))))
+(define catch
+  (lambda (e statement state break continue throw prog-return)
+    (if (eq? e (catch-err statement))
+        (finally (m-state (catch-body statement) state break continue throw prog-return))
+        (finally statement state break continue throw prog-return))))
+(define finally
+  (lambda (statement state break continue throw prog-return)
+    (if (null? (finally-body statement))
+        state
+        (m-state (finally-body statement) state break continue throw prog-return))))
 ; (try body (catch (e) body) (finally body))
 (define try-body cadr)
 (define catch-body (lambda (t) (if (null? (cddr (caddr t)))  '()  (car (cddr (caddr t))))))
@@ -218,7 +238,7 @@
   (lambda (statement state break continue throw prog-return)
     (state-pop-scope (run-state (cdr statement)
                                 (state-push-scope state)
-                                (lambda (s) (break (state-pop-scope s)))
+                                (lambda (s) (state-pop-scope (break s)))
                                 continue throw prog-return))))
     ;(call/cc
     ; (lambda (brk)
@@ -264,20 +284,18 @@
 (define m-state-if
     (lambda (statement state break continue throw prog-return)
         (cond 
-            ((m-bool (if-cond statement) (m-state (if-cond statement) state if-break-err if-break-err if-throw-err if-break-err))
+            ((m-bool (if-cond statement) (m-state (if-cond statement) state default-brk default-brk default-brk default-brk))
              (m-state (if-then statement)
-                      (m-state (if-cond statement) state if-break-err if-break-err if-throw-err if-break-err)
+                      (m-state (if-cond statement) state default-brk default-brk default-brk default-brk)
                       break continue throw prog-return))
             ((eq? 3 (len statement)) state) ; no optional-else-statement
             (else
              (m-state (if-optelse statement)
-                      (m-state (if-cond statement) state if-break-err if-break-err if-throw-err if-break-err)
+                      (m-state (if-cond statement) state default-brk default-brk default-brk default-brk)
                       break continue throw prog-return)))))
 (define if-cond cadr)
 (define if-then caddr)
 (define if-optelse cadddr)
-(define if-break-err (lambda (s) (error 'Mstate_if "cannot have break or continue in conditional clause")))
-(define if-throw-err (lambda (e s) (error 'Mstate_if "cannot have throw in conditional clause")))
 
 ; denotational semantics of return-expression
 ; Mstate ('return <expression>', state) = {
@@ -300,6 +318,11 @@
     (if b
         'true
         'false)))
+(define bool?
+  (lambda (sym)
+    ((eq? 'true sym) #t)
+    ((eq? 'false sym) #t)
+    (else #f)))
 (define bool-op?
   (lambda (sym)
     (cond
@@ -335,18 +358,16 @@
     (call/cc
      (lambda (brk)
        (letrec ((loop (lambda (statement state)
-                        (if (m-bool (while-cond statement) state)
+                        (if (m-bool (while-cond statement) (m-state (while-cond statement) state default-brk default-brk default-brk default-brk))
                             (loop statement (m-state (while-stmt statement)
-                                                     state
+                                                     (m-state (while-cond statement) state default-brk default-brk default-brk default-brk)
                                                      (lambda (s) (brk s))
                                                      (lambda (s) (brk (loop statement s)))
                                                      throw prog-return))
-                            state))))
+                            (m-state (while-cond statement) statedefault-brk default-brk default-brk default-brk)))))
          (loop statement state))))))                            
 (define while-cond cadr)
 (define while-stmt caddr)
-(define while-break-err (lambda (s) (error 'Mstate_while "cannot have break, continue, or return in while condition")))
-(define while-throw-err (lambda (e s) (error 'Mstate_while "cannot have throw in while condition")))
 
 ; denotational semantics of variable-declaration option 1
 ; Mstate(var <variable> (<value>), S) = {
