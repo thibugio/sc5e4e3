@@ -13,7 +13,11 @@
 ; returned by parser, and returns the program state 
 (define interpret
     (lambda (f)
-      (run-state (parser f) empty-state default-brk default-brk (lambda (e s) s) (lambda (s) s))))
+      (call/cc
+       (lambda (break)
+         (let ((do-interpret (lambda (return)
+                               (run-state (parser f) empty-state default-brk default-brk (lambda (e s) s) return))))
+           (do-interpret (lambda (s) (break s))))))))
 
 ; takes a parse tree 't' and initial state 's' and returns the program state
 ; Formally, a parse tree is a list where each sublist corresponds to a statement.
@@ -194,40 +198,36 @@
     (throw (except-stmt statement) state)))
 (define except-stmt cadr)
 
-;(define m-state-tcf
-;  (lambda (statement state break continue throw prog-return)
-;    (call/cc
-;     (lambda (try-break)
-;       (letrec ((finally (lambda (s)
-;                           (if (null? (finally-body statement))
-;                               s
-;                               (m-state (finally-body statement) s break continue throw prog-return))))
-;                (try (lambda (s try-throw)
-;                       (finally (m-state (try-body statement) s break continue try-throw prog-return))))
-;                (catch (lambda (e s)
-;                         (if (eq? e (catch-err statement))
-;                             (finally (m-state (catch-body statement) s break continue throw prog-return))
-;                             (finally s)))))
-;         (try state (lambda (e s) (catch e s))))))))
 (define m-state-tcf
   (lambda (statement state break continue throw prog-return)
-    (try statement state break continue (lambda (e s) (catch e statement s break continue throw prog-return)) prog-return)))
-(define try
-  (lambda (statement state break continue throw prog-return)
-    (if (list? (car (try-body statement)))
-        (finally statement (run-state (try-body statement) state break continue throw prog-return) break continue throw prog-return)
-        (finally statement (m-state (try-body statement) state break continue throw prog-return) break continue throw prog-return))))
-(define catch
-  (lambda (e statement state break continue throw prog-return)
-    (if (eq? e (catch-err statement))
-        (finally (m-state (catch-body statement) state break continue throw prog-return))
-        (finally statement state break continue throw prog-return))))
-(define finally
-  (lambda (statement state break continue throw prog-return)
-    (if (null? (finally-body statement))
-        state
-        (m-state (finally-body statement) state break continue throw prog-return))))
-; (try body (catch (e) body) (finally body))
+    (call/cc
+     (lambda (try-break)
+       (letrec ((finally (lambda (s)
+                    (cond
+                      ((null? (finally-body statement)) s)
+                      ((list? (car (finally-body statement))) (run-state (finally-body statement) s break continue throw prog-return))
+                      (else (m-state (finally-body statement) s break continue throw prog-return)))))
+
+                (try (lambda (s try-throw)
+                       (if (list? (car (try-body statement)))
+                           (finally (run-state (try-body statement) s break continue try-throw prog-return))
+                           (finally (m-state (try-body statement) s break continue try-throw prog-return)))))
+
+                (catch (lambda (e s)
+                         (if (list? (car (catch-body statement)))
+                             (finally (run-state (replace*-cps (catch-err statement) e (catch-body statement) (lambda (v) v)) s break continue throw prog-return))
+                             (finally (m-state (replace*-cps (catch-err statement) e (catch-body statement) (lambda (v) v)) s break continue throw prog-return))))))
+         (try state (lambda (e s) (try-break (catch e s)))) )))))
+
+(define replace*-cps
+  (lambda (old new l return)
+    (cond
+      ((null? l) (return l))
+      ((pair? (car l)) (replace*-cps old new (cdr l) (lambda (v) (replace*-cps old new (car l) (lambda (v2) (return (cons v2 v)))))))
+      ((eq? (car l) old) (replace*-cps old new (cdr l) (lambda (v) (return (cons new v)))))
+      (else (replace*-cps old new (cdr l) (lambda (v) (return (cons (car l) v))))))))
+
+  ; (try body (catch (e) body) (finally body))
 (define try-body cadr)
 (define catch-body (lambda (t) (if (null? (cddr (caddr t)))  '()  (car (cddr (caddr t))))))
 (define catch-err (lambda (t) (car (cadr (caddr t)))))
@@ -364,7 +364,7 @@
                                                      (lambda (s) (brk s))
                                                      (lambda (s) (brk (loop statement s)))
                                                      throw prog-return))
-                            (m-state (while-cond statement) statedefault-brk default-brk default-brk default-brk)))))
+                            (m-state (while-cond statement) state default-brk default-brk default-brk default-brk)))))
          (loop statement state))))))                            
 (define while-cond cadr)
 (define while-stmt caddr)
