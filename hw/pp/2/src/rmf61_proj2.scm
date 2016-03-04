@@ -16,7 +16,7 @@
       (call/cc
        (lambda (break)
          (let ((do-interpret (lambda (return)
-                               (run-state (parser f) empty-state default-brk default-brk (lambda (e s) s) return))))
+                               (run-state (parser f) empty-state default-brk default-brk default-throw return))))
            (do-interpret (lambda (s) (break s))))))))
 
 ; takes a parse tree 't' and initial state 's' and returns the program state
@@ -38,6 +38,7 @@
 
 ; default break/continue continuation
 (define default-brk (lambda (s) (error 'break "Break or Continue outside of while loop")))
+(define default-throw (lambda (e s) (error 'throw "Throw without Catch")))
 
 (define empty-state '())
 (define empty-scope-state '(()()))
@@ -204,7 +205,7 @@
      (lambda (try-break)
        (letrec ((finally (lambda (s)
                     (cond
-                      ((null? (finally-body statement)) s)
+                      ((null? (finally-stmt statement)) s)
                       ((list? (car (finally-body statement))) (run-state (finally-body statement) s break continue throw prog-return))
                       (else (m-state (finally-body statement) s break continue throw prog-return)))))
 
@@ -231,23 +232,17 @@
 (define try-body cadr)
 (define catch-body (lambda (t) (if (null? (cddr (caddr t)))  '()  (car (cddr (caddr t))))))
 (define catch-err (lambda (t) (car (cadr (caddr t)))))
+(define finally-stmt (lambda (t) (car (cdddr t))))
 (define finally-body (lambda (t) (cadr (car (cdddr t)))))
 
 ; a new block of code. pop the scope when finished executing.
 (define m-state-begin-scope
   (lambda (statement state break continue throw prog-return)
-    (state-pop-scope (run-state (cdr statement)
-                                (state-push-scope state)
-                                (lambda (s) (state-pop-scope (break s)))
-                                continue throw prog-return))))
-    ;(call/cc
-    ; (lambda (brk)
-    ;   (let ((begin-scope (lambda ()
-    ;                        (state-pop-scope (run-state (cdr statement)
-    ;                                                    (state-push-scope state)
-    ;                                                    (lambda (s) (brk (state-pop-scope s)))
-    ;                                                    continue throw prog-return)))))
-    ;     (begin-scope))))))             
+    (call/cc
+     (lambda (brk)
+       (let ((begin-scope (lambda (b c)
+                            (state-pop-scope (run-state (cdr statement) (state-push-scope state) b c throw prog-return)))))
+         (begin-scope (lambda (s) (brk (break (state-pop-scope s)))) (lambda (s) (brk (continue (state-pop-scope s))))))))))             
     
 ; denotational semantics of variable-assignment
 ; Mstate ('= variable expression', state) = {
