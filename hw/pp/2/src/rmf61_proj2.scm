@@ -2,9 +2,12 @@
 ; EECS 345
 ; Programming Project 2
 
+; a note about naming conventions, since they were complained about on project 1:
+; state-manipulation functions have names such as state-push-X, state-pop-X, etc because the state
+; is visualized as a 'stack', where only the first scope/variable is dealt with. This complements
+; the functional style since the functions will act upon the head of the state, and then recurse.
 
 (load "simpleParser.scm")
-
 
 ;======================================
 ; main interpreter function
@@ -348,11 +351,6 @@
 ;   else
 ;     Mstate(<cond>, S)
 ; }
-;(define m-state-while
-;  (lambda (statement state)
-;    (if (m-bool (while-cond statement) (m-state (while-cond statement) state))
-;        (m-state-while statement (m-state (while-stmt statement) (m-state (while-cond statement) state)))
-;        (m-state (while-cond statement) state))))
 (define m-state-while
   (lambda (statement state break continue throw prog-return)
     (call/cc
