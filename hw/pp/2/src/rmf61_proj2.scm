@@ -364,7 +364,7 @@
                                                      (lambda (s) (brk s))
                                                      (lambda (s) (brk (loop statement s)))
                                                      throw prog-return))
-                            (m-state (while-cond statement) state default-brk default-brk default-throw default-brk)))))
+                            (m-state (while-cond statement) (m-state (while-cond statement) state default-brk default-brk default-throw default-brk) default-brk default-brk default-throw default-brk)))))
          (loop statement state))))))                            
 (define while-cond cadr)
 (define while-stmt caddr)
