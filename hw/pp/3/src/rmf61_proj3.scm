@@ -28,7 +28,7 @@
     (call/cc
      (lambda (break)
        (let ((do-interpret (lambda (return)
-                             (return (m-value-funcall '(funcall main) (create-table (parser f) empty-state) default-brk default-brk default-throw return)))))
+                             (return (m-value-funcall '(funcall main) (create-table (parser f) empty-state))))))
          (do-interpret (lambda (s) (break s))))))))
 
 ; same as interpret function from Project 2, but takes a parsetree directly instead of a file, and an initial state
@@ -178,7 +178,7 @@
       ((empty-state? state) #f)
       ((empty-scope-state? (state-peek-scope state)) (state-lookup-func? funcname funcparams (state-pop-scope state)))
       ((and (eq? funcname (state-peek-var state))
-            (and (list? (state-peek-val state)) (listeq? funcparams (closure-paramlist (state-peek-val state))))) #t)
+            (and (list? (state-peek-val state)) (listleneq? funcparams (closure-paramlist (state-peek-val state))))) #t)
       (else (state-lookup-func? funcname funcparams (state-pop-binding state))))))
 
 ; find the value associated with a variable in the state (starting with inner-most scope)
@@ -223,9 +223,7 @@
   (lambda (statement state break continue throw prog-return)
     (if (state-lookup-inscope? (func-name statement) state)
         (myerror 'MstateFunctionBinding "Function already declared in this scope" state)
-        (state-add-binding (func-name statement)
-                           (cons (func-paramlist statement) (cons (func-body statement) (cons (mk-create-func-env (func-name statement)) '())))
-                           state))))
+        (state-add-binding (func-name statement) (create-function-closure statement) state))))
 
 (define m-state-break (lambda (state break) (break state)))
 
@@ -253,8 +251,8 @@
 
                 (catch (lambda (e s)
                          (if (list? (car (catch-body statement)))
-                             (finally (run-state (replace*-cps (catch-err statement) e (catch-body statement) (lambda (v) v)) s break continue throw prog-return))
-                             (finally (m-state (replace*-cps (catch-err statement) e (catch-body statement) (lambda (v) v)) s break continue throw prog-return))))))
+                             (finally (run-state (replace*-cps (catch-err statement) e (catch-body statement)) s break continue throw prog-return))
+                             (finally (m-state (replace*-cps (catch-err statement) e (catch-body statement)) s break continue throw prog-return))))))
          (try state (lambda (e s) (try-break (catch e s)))) )))))
 
   ; (try body (catch (e) body) (finally body))
@@ -371,7 +369,8 @@
         ((state-lookup-inscope? (var-var statement) state) (error 'Mstate_var "Variable already declared"))
         ((eq? 2 (len statement)) (state-add-binding (var-var statement) varInitVal state)) ; var <variable>;
         ((and (list? (var-value statement))
-                 (or (bool-op? (get-operator (var-value statement)))
+                 (or (bool-op1? (get-operator (var-value statement)))
+                     (bool-op2? (get-operator (var-value statement)))
                      (comp-op? (get-operator (var-value statement))))) (state-add-binding (var-var statement) (bool2sym (m-bool (var-value statement) state)) state))
         (else (state-add-binding (var-var statement) (m-value (var-value statement) state) state)))))
 (define var-var cadr)
@@ -455,35 +454,51 @@
 (define m-value-funcall
   (lambda (statement state)
     (if (state-lookup-func? (func-name statement) (func-paramlist statement) state) 
-        (evaluate-function (bind-params (evaluate-list (func-paramlist statement) state)
+        (evaluate-function (bind-params (func-paramlist statement)
                                         (closure-paramlist (state-get-value (func-name statement) state))
-                                        (closure-fbody (state-get-value (func-name statement) state)))
+                                        (closure-fbody (state-get-value (func-name statement) state))
+                                        state)
                            ((closure-env (state-get-value (func-name statement) state)) state))
         (myerror (func-name statement) "Function not defined" state))))
 
 (define evaluate-function
   (lambda (fbody fenv)
     ((lambda (funcRetVal)
-       (cond
+      (cond
          ((number? funcRetVal) funcRetVal)
          ((eq? 'true funcRetVal) #t)
          ((eq? 'false funcRetVal) #f)
          (else noValue)))
-     (old-interpret2 fbody fenv))))
+    (old-interpret2 fbody fenv))))
         
 
-; evaluate a list of items. return a list.
-(define evaluate-list
+; evaluate a list of expressions. return a list of the evaluated expressions.
+(define m-value-list
   (lambda (l state) (map (lambda (x) (m-value x state)) l)))
 
-; bind a list of evaluated actual parameters to a list of formal parameters
-; and do substitution in the body statements.
-(define bind-params
+(define bind-params-byreference
+  (lambda (actuals formals body state)
+    (letrec ((loop (lambda (evaluated formals body)
+                     (cond
+                       ((and (null? evaluated) (null? formals)) body)
+                       ((or (null? evaluated) (null? formals)) (error 'BindParams "Actual and Formal parameter lists differ in length"))
+                       ((and (eq? '& (car formals))
+                             (or (number? (car evaluated)) (eq? #t (car actuals)) (eq? #f (car actuals))))
+                             (error 'BindParams "Cannot pass a literal value as a reference"))
+                        ((eq? '& (car formals)) (loop (cdr evaluated) (cddr formals) (replace*-cps (cadr formals) (car evaluated) body)))
+                        (else (loop (cdr evaluated) (cdr formals) (replace*-cps (car formals) (car evaluated) body)))))))
+      (loop (m-value-list actuals state) formals body))))
+
+; bind a list of actual parameters to a list of formal parameters.
+;(define bind-params bind-params-byvalue)
+(define bind-params bind-params-byreference)
+
+(define do-param-substitution
   (lambda (actuals formals body)
     (cond
       ((and (null? actuals) (null? formals)) body)
       ((or (null? actuals) (null? formals)) (error 'BindParams "Actual and Formal parameter lists differ in length"))
-      (else (bind-params (cdr actuals) (cdr formals) (replace*-cps (car formals) (car actuals) body (lambda (v) v)))))))
+      (else (bind-params (cdr actuals) (cdr formals) (replace*-cps (car formals) (car actuals) body))))))
     
 
 ;===================================
@@ -520,6 +535,11 @@
   (lambda (statement table)
     (m-state-funcdef statement table err1 err1 err2 err1)))
 
+; create the function closure from the funtion statement: (function <name> (<args>) (<body>))
+(define create-function-closure
+  (lambda (statement)
+    (cons (func-paramlist statement) (cons (func-body statement) (cons (mk-create-func-env (func-name statement)) '())))))
+
 ; return a function to create the function environment from the current environment
 (define mk-create-func-env
   (lambda (fname)
@@ -531,10 +551,15 @@
             ((r r) (state-pop-scope currentstate))))))))
 
 (define func-name (lambda (statement) (cadr statement)))
-(define func-paramlist (lambda (statement) (if (null? (cddr statement)) '() (caddr statement))))
+(define func-paramlist
+  (lambda (statement)
+    (cond
+      ((null? (cddr statement)) '())
+      ((not (list? (caddr statement))) (cons (caddr statement) '()))
+      (else (caddr statement)))))
 (define func-body (lambda (statement) (cadddr statement)))
 (define closure-paramlist (lambda (closure) (car closure)))
-(define closure-fbody (lambda (closure) (cadr closure)))
+(define closure-fbody (lambda (closure) (cadr closure)));(cadr closure)))
 (define closure-env (lambda (closure) (caddr closure)))
 
 ;============================
@@ -542,12 +567,14 @@
 
 ; substitution of an element in a list
 (define replace*-cps
-  (lambda (old new l return)
-    (cond
-      ((null? l) (return l))
-      ((pair? (car l)) (replace*-cps old new (cdr l) (lambda (v) (replace*-cps old new (car l) (lambda (v2) (return (cons v2 v)))))))
-      ((eq? (car l) old) (replace*-cps old new (cdr l) (lambda (v) (return (cons new v)))))
-      (else (replace*-cps old new (cdr l) (lambda (v) (return (cons (car l) v))))))))
+  (lambda (old new l)
+    (letrec ((loop-cps (lambda (old new l return)
+                         (cond
+                           ((null? l) (return l))
+                           ((pair? (car l)) (loop-cps old new (cdr l) (lambda (v) (loop-cps old new (car l) (lambda (v2) (return (cons v2 v)))))))
+                           ((eq? (car l) old) (loop-cps old new (cdr l) (lambda (v) (return (cons new v)))))
+                           (else (loop-cps old new (cdr l) (lambda (v) (return (cons (car l) v)))))))))
+      (loop-cps old new l (lambda (v) v)))))
 
 ; test if two (flat) lists are equal 
 (define listeq?
@@ -563,6 +590,17 @@
          (loop l1 l2))))))
     ; only for equal-length lists:
     ;(foldl (lambda (b1 b2) (and b1 b2)) #t (map (lambda (x y) (eq? x y)) l1 l2))))
+
+(define listleneq?
+  (lambda (l1 l2)
+    (call/cc
+     (lambda (break)
+       (letrec ((loop (lambda (l1 l2)
+                        (cond
+                          ((and (null? l1) (null? l2)) #t)
+                          ((or (null? l1) (null? l2)) (break #f))
+                          (else (loop (cdr l1) (cdr l2)))))))
+         (loop l1 l2))))))
 
 
 
