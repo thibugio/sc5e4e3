@@ -28,7 +28,7 @@
     (call/cc
      (lambda (break)
        (let ((do-interpret (lambda (return)
-                             (return (m-value-funcall '(funcall main) (create-table (parser f) empty-state))))))
+                             (return (m-value '(funcall main) (create-table (parser f) empty-state))))))
          (do-interpret (lambda (s) (break s))))))))
 
 ; same as interpret function from Project 2, but takes a parsetree directly instead of a file, and an initial state
@@ -173,13 +173,14 @@
 ; check whethere a function (name, paramlist) is recorded in any scope of the state (starting with inner-most scope)
 ; having a separate lookup function for functions allows functions to be overloaded with different paramenter lists.
 (define state-lookup-func?
-  (lambda (funcname funcparams state)
-    (cond
-      ((empty-state? state) #f)
-      ((empty-scope-state? (state-peek-scope state)) (state-lookup-func? funcname funcparams (state-pop-scope state)))
-      ((and (eq? funcname (state-peek-var state))
-            (and (list? (state-peek-val state)) (listleneq? funcparams (closure-paramlist (state-peek-val state))))) #t)
-      (else (state-lookup-func? funcname funcparams (state-pop-binding state))))))
+  (lambda (funcname funcparams-eval state)
+    (state-lookup? funcname state)))
+    ;(cond
+    ;  ((empty-state? state) #f)
+    ;  ((empty-scope-state? (state-peek-scope state)) (state-lookup-func? funcname funcparams (state-pop-scope state)))
+    ;  ((and (eq? funcname (state-peek-var state)) 
+    ;        (and (list? (state-peek-val state)) (listleneq? funcparams-eval (closure-paramlist (state-peek-val state))))) #t)
+    ;  (else (state-lookup-func? funcname funcparams (state-pop-binding state))))))
 
 ; find the value associated with a variable in the state (starting with inner-most scope)
 ; return the value of the variable, or an error condition if the variable cannot be found
@@ -221,9 +222,9 @@
 ; the function body, and a function that creates the function environment from the current environment
 (define m-state-funcdef
   (lambda (statement state break continue throw prog-return)
-    (if (state-lookup-inscope? (func-name statement) state)
+    (if (state-lookup-inscope? (funcdef-name statement) state)
         (myerror 'MstateFunctionBinding "Function already declared in this scope" state)
-        (state-add-binding (func-name statement) (create-function-closure statement) state))))
+        (state-add-binding (funcdef-name statement) (create-function-closure statement) state))))
 
 (define m-state-break (lambda (state break) (break state)))
 
@@ -444,7 +445,7 @@
             ((eq? noValue statement) state) ;void function return
             ((or (eq? 'true statement) (eq? 'false statement)) statement) 
             ((state-lookup? statement state) (m-value (state-get-value statement state) state))
-            (else (myerror 'Mvalue "Variable not declared" state))))))
+            (else (myerror statement "Mvalue: Variable not declared" state))))))
 
 ; evaluate a function call:
 ; 1. create the function environment from the current environment
@@ -453,13 +454,13 @@
 ; 3. interpret the function body within the function environment
 (define m-value-funcall
   (lambda (statement state)
-    (if (state-lookup-func? (func-name statement) (func-paramlist statement) state) 
-        (evaluate-function (bind-params (func-paramlist statement)
-                                        (closure-paramlist (state-get-value (func-name statement) state))
-                                        (closure-fbody (state-get-value (func-name statement) state))
+    (if (state-lookup-func? (funcall-name statement) (funcall-paramlist statement) state) 
+        (evaluate-function (bind-params (funcall-paramlist statement)
+                                        (closure-paramlist (state-get-value (funcall-name statement) state))
+                                        (closure-fbody (state-get-value (funcall-name statement) state))
                                         state)
-                           ((closure-env (state-get-value (func-name statement) state)) state))
-        (myerror (func-name statement) "Function not defined" state))))
+                           ((closure-env (state-get-value (funcall-name statement) state)) state))
+        (myerror (funcall-name statement) "Function not defined" state))))
 
 (define evaluate-function
   (lambda (fbody fenv)
@@ -470,7 +471,11 @@
          ((eq? 'false funcRetVal) #f)
          (else noValue)))
     (old-interpret2 fbody fenv))))
-        
+
+; evaluate a list of function parameters and return the evaluated list.
+(define evaluate-params
+  (lambda (params state)
+    (m-value-list params state)))    
 
 ; evaluate a list of expressions. return a list of the evaluated expressions.
 (define m-value-list
@@ -487,7 +492,7 @@
                              (error 'BindParams "Cannot pass a literal value as a reference"))
                         ((eq? '& (car formals)) (loop (cdr evaluated) (cddr formals) (replace*-cps (cadr formals) (car evaluated) body)))
                         (else (loop (cdr evaluated) (cdr formals) (replace*-cps (car formals) (car evaluated) body)))))))
-      (loop (m-value-list actuals state) formals body))))
+      (loop actuals formals body))))
 
 ; bind a list of actual parameters to a list of formal parameters.
 ;(define bind-params bind-params-byvalue)
@@ -538,7 +543,7 @@
 ; create the function closure from the funtion statement: (function <name> (<args>) (<body>))
 (define create-function-closure
   (lambda (statement)
-    (cons (func-paramlist statement) (cons (func-body statement) (cons (mk-create-func-env (func-name statement)) '())))))
+    (cons (funcdef-paramlist statement) (cons (funcdef-body statement) (cons (mk-create-func-env (funcdef-name statement)) '())))))
 
 ; return a function to create the function environment from the current environment
 (define mk-create-func-env
@@ -550,14 +555,31 @@
             currentstate
             ((r r) (state-pop-scope currentstate))))))))
 
-(define func-name (lambda (statement) (cadr statement)))
-(define func-paramlist
+; for a function-call statement: (funcall name [args])
+(define funcall-name (lambda (statement) (cadr statement)))
+(define funcall-paramlist
+  (lambda (statement)
+    (if (null? (cddr statement))
+        '()
+        (((lambda (m) (m m))
+          (lambda (f)
+            (lambda (l)
+              (if (null? l)
+                  '()
+                  (cons (car l) ((f f) (cdr l)))))))
+         (cddr statement)))))
+
+; for a function-definition statement: (function name (args) (body))
+(define funcdef-name (lambda (statement) (cadr statement)))
+(define funcdef-paramlist
   (lambda (statement)
     (cond
       ((null? (cddr statement)) '())
       ((not (list? (caddr statement))) (cons (caddr statement) '()))
       (else (caddr statement)))))
-(define func-body (lambda (statement) (cadddr statement)))
+(define funcdef-body (lambda (statement) (cadddr statement)))
+
+; for a function-closure: ((args) (body) (mk-env-function))
 (define closure-paramlist (lambda (closure) (car closure)))
 (define closure-fbody (lambda (closure) (cadr closure)));(cadr closure)))
 (define closure-env (lambda (closure) (caddr closure)))
