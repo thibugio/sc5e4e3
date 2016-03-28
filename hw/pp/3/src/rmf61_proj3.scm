@@ -8,17 +8,25 @@
 ; error-handling:
 (define debug 1)
 (define myerror
-  (lambda (arg1 arg2 state)
+  (lambda (arg1 arg2 thingtoprint)
   (if (zero? debug)
       (error arg1 arg2); this will produce the nicely-formatted error message as intended
-      (error arg1 arg2 (print state))))) ; this will produce a real error, but the error message will
+      (error arg1 arg2 (print thingtoprint))))) ; this will produce a real error, but the error message will
                                          ; still include both arguments, -and- the state gets printed.
 ; default break/continue continuation
 (define default-brk (lambda (s) (myerror 'break "Break or Continue outside of Loop" s)));(error 'break "Break or Continue outside of while loop")))
 (define default-throw (lambda (e s) (myerror 'throw "Throw without Catch" s)));(error 'throw "Throw without Catch")))
+(define default-ret (lambda (v s) (myerror 'return "Return statement" v)))
 ; general error handlers with 1 and 2 params
 (define err1 (lambda (s) (myerror 'Error "Error!" s)))
 (define err2 (lambda (e s) (err1 s)))
+
+; global definitions
+(define empty-state '())
+(define empty-scope-state '(()()))
+(define varInitVal 'Undefined)
+(define progRetVal '$v0) ;not used.
+(define noValue 'Void)
 
 ;=======================================
 ; main interpreter function
@@ -29,16 +37,19 @@
      (lambda (break)
        (let ((do-interpret (lambda (return)
                              (return (m-value '(funcall main) (create-table (parser f) empty-state))))))
-         (do-interpret (lambda (s) (break s))))))))
+         (do-interpret (lambda (v) (break v))))))))
 
 ; same as interpret function from Project 2, but takes a parsetree directly instead of a file, and an initial state
-(define old-interpret2
-    (lambda (parsetree state)
-      (call/cc
-       (lambda (break)
-         (let ((do-interpret (lambda (return)
-                               (run-state parsetree state default-brk default-brk default-throw return))))
-           (do-interpret (lambda (s) (break s))))))))
+;(define old-interpret2
+;    (lambda (parsetree state)
+;      (call/cc
+;       (lambda (break)
+;         (let ((do-interpret (lambda (return)
+;                               (run-state parsetree state default-brk default-brk default-throw return))))
+;           (do-interpret (lambda (v s) (break v))))))))
+(define interpret-function
+  (lambda (parsetree state return)
+    (run-state parsetree state default-brk default-brk default-throw return))) 
 
 ; takes a parse tree 't' and initial state 's' and returns the program state
 ; Formally, a parse tree is a list where each sublist corresponds to a statement.
@@ -50,13 +61,6 @@
                      (m-state (car pt) state break continue throw prog-return)
                      break continue throw prog-return))))
 
-
-(define empty-state '())
-(define empty-scope-state '(()()))
-(define varInitVal 'Undefined)
-(define progRetVal '$v0)
-(define noValue 'Void)
-
 (define parsetree-pop cdr)
 (define parsetree-peek car)
 
@@ -65,7 +69,7 @@
 (define get-operand2 caddr)
 
 ;===================================
-; basic state manipulation functions
+; state manipulation functions
 
 ; define program state as S = (((z, ...) (varInitVal, ...)) ((x, y, ...) (1, 2, ...))) =>
 ;   x:1:0, y:2:0, z:'Undefined:1,
@@ -79,7 +83,7 @@
 
 ; return the first scope in the state ( ->( (x,y,z) (1,2,3) )  ( (q,r,s) (4,5,6) )  )
 (define state-peek-scope (lambda (s) (if (empty-state? s)
-                                         (error 'state-peek-scope "empty state") ; for debugging
+                                         (error 'StatePeekScope "empty state") ; for debugging
                                          (car s))))
 ; return the first variable in the state
 (define state-peek-var (lambda (s) (cond ((empty-state? s) (error 'state-peek-scope "empty state"))
@@ -217,10 +221,11 @@
                (comp-op? (get-operator statement))) (m-state (get-operand2 statement) (m-state (get-operand1 statement) state break continue throw prog-return) break continue throw prog-return))
           ((bool-op1? (get-operator statement)) (m-state (get-operand1 statement) state break continue throw prog-return))
           ((eq? 'function (get-operator statement)) (m-state-funcdef statement state break continue throw prog-return))
-          ((eq? 'funcall (get-operator statement)) (prog-return (m-value statement state)))
+          ((eq? 'funcall (get-operator statement)) (m-state-funcall statement state break continue throw prog-return))
           (else (myerror 'Mstate "Unknown statement" statement)))
         (cond
           ((number? (m-value statement state)) state)
+          ((boolsym? (m-value statement state)) state)
           ((bool? (m-value statement state)) state)
           ((eq? noValue statement) state)
           ((state-lookup? statement state) state)
@@ -233,6 +238,16 @@
     (if (state-lookup-inscope? (funcdef-name statement) state)
         (myerror 'MstateFunctionBinding "Function already declared in this scope" state)
         (state-add-binding (funcdef-name statement) (create-function-closure statement) state))))
+
+
+(define m-state-funcall
+  (lambda (statement state break continue throw prog-return)
+    (if (not (state-lookup? (funcall-name statement) state))
+        (myerror 'Mvalue_Funcall "Function not defined" (funcall-name statement))
+        (evaluate-function-byreference (funcall-paramlist statement)
+                                       (state-get-value (funcall-name statement) state)
+                                       state
+                                       (lambda (v s) (state-pop-scope s))))))
 
 
 (define m-state-break (lambda (state break) (break state)))
@@ -314,7 +329,8 @@
 (define if-then caddr)
 (define if-optelse cadddr)
 
-
+; returns the value of the expression along with the state by passing them
+; to the prog-return continuation
 (define m-state-return
     (lambda (statement state break continue throw prog-return) 
         ;(state-add-binding progRetVal (m-value (return-expr statement) state) state)))
@@ -323,7 +339,8 @@
                                   (bool-op2? (get-operator (return-expr statement)))
                                   (comp-op? (get-operator (return-expr statement)))))
                          (bool2sym (m-bool (return-expr statement) state))
-                         (m-value (return-expr statement) state)))))
+                         (m-value (return-expr statement) state))
+                     state)));(m-state (return-expr statement) state break continue throw prog-return))))
 (define return-expr cadr)
 
 
@@ -350,15 +367,20 @@
         ((state-lookup-inscope? (var-var statement) state) (error 'Mstate_var "Variable already declared"))
         ((eq? 2 (len statement)) (state-add-binding (var-var statement) varInitVal state)) ;(var <name>)
         ((and (list? (var-value statement))
-                 (or (bool-op1? (get-operator (var-value statement)))
-                     (bool-op2? (get-operator (var-value statement)))
-                     (comp-op? (get-operator (var-value statement))))) (state-add-binding (var-var statement) (bool2sym (m-bool (var-value statement) state)) state))
-        (else (state-add-binding (var-var statement) (m-value (var-value statement) state) state)))))
+              (or (bool-op1? (get-operator (var-value statement)))
+                  (bool-op2? (get-operator (var-value statement)))
+                  (comp-op? (get-operator (var-value statement)))))
+         (state-add-binding (var-var statement)
+                            (bool2sym (m-bool (var-value statement) state))
+                            (m-state (var-value statement) state break continue throw prog-return)));state))
+        (else (state-add-binding (var-var statement)
+                                 (m-value (var-value statement) state)
+                                 (m-state (var-value statement) state break continue throw prog-return))))));state)))))
 (define var-var cadr)
 (define var-value caddr)
 
 ;========================================
-; Mbool ;;;;ERROR: NEED FUNCALL TO BE ABLE TO MODIFY STATE- CAN'T ALWAYS CALL M-BOOL WITH OLD STATE
+; Mbool
 
 ; M_bool function
 ; returns whether the given condition is satisfied in the given state
@@ -383,14 +405,14 @@
             ((eq? '|| (get-operator condition)) (or (m-bool (get-operand1 condition) state)
                                                        (m-bool (get-operand2 condition) state)))
             ((eq? '!  (get-operator condition)) (not (m-bool (get-operand1 condition) state)))
-            ((eq? 'funcall (get-operator condition)) (m-bool (m-value condition state) state))
+            ((eq? 'funcall (get-operator condition)) (m-bool (m-value condition state) (m-state condition state))) ;this is wrong!
             (else (myerror 'Mbool "Unknown expression" (get-operator condition))))
         (cond
           ((number? condition) (myerror 'Mbool "Type Error: given Number, expected Boolean" condition))
           ((eq? noValue condition) (myerror 'Mbool "Type Error: given 'Void', expected Boolean" condition))
           ((boolsym? condition) (sym2bool condition))
           ((bool? condition) condition)
-          ((state-lookup-inscope? condition state) (m-bool (state-get-value condition state) state))
+          ((state-lookup? condition state) (m-bool (state-get-value condition state) state))
           (else (myerror 'Mbool "Unknown atom" condition))))))
 
 (define bool2sym (lambda (b) (if b 'true 'false)))
@@ -441,43 +463,62 @@
             ((eq? 'funcall (get-operator statement)) (m-value-funcall statement state))
             (else (myerror 'Mvalue "Unknown statement" statement)))
        (cond
-            ((number? statement) statement)
-            ((eq? varInitVal statement) (myerror 'Mvalue "Variable undefined" statement))
-            ((or (eq? 'true statement) (eq? 'false statement)) statement)
+            ((number? statement) statement)            
+            ((boolsym? statement) statement)
+            ((bool? statement) statement)
             ((eq? noValue statement) state) ;void function return
+            ((eq? varInitVal statement) (myerror 'Mvalue "Variable undefined" statement))
+            ((not (state-lookup? statement state)) (myerror 'Mvalue "Variable not declared" statement))
             ((state-lookup? statement state) (m-value (state-get-value statement state) state))
-            (else (myerror 'Mvalue "Variable not declared" statement))))))
+            (else (myerror 'Mvalue "Unknown atom" statement))))))
 
 ; do basic error-checking on the function call then evaluate the function
 (define m-value-funcall
   (lambda (statement state)
     (if (not (state-lookup? (funcall-name statement) state))
         (myerror 'Mvalue_Funcall "Function not defined" (funcall-name statement))
-        (evaluate-function-byreference (funcall-paramlist statement) (state-get-value (funcall-name statement) state) state))))
+        (evaluate-function-byreference (funcall-paramlist statement)
+                                       (state-get-value (funcall-name statement) state)
+                                       state
+                                       (lambda (v s) (check-func-return v))))))
 
+; evaluate a function-call by-reference.
+; evaluate the actuals parameters in the current context.
+; bind the actual parameters to the formal parameters in the function context.
+; call the general evaluate-function routine to interpret the function body in the function context.
+; takes a handler function (lambda (v s)...) to deal with the return value and resulting state.
 (define evaluate-function-byreference
-  (lambda (paramlist closure currentstate)
+  (lambda (paramlist closure currentstate handler)
     (evaluate-function (closure-fbody closure)
-                       (((lambda (m) (m m))
-                         (lambda (f)
-                           (lambda (actuals formals fenv currentenv)
-                             (cond
-                               ((and (null? actuals) (null? formals)) fenv)
-                               ((or (null? actuals) (null? formals)) (myerror 'EvaluateFunction "Actual and Formal Parameter lists differ in length" actuals))
-                               (else ((f f) (cdr actuals) (cdr formals) (state-add-binding (car formals) (m-value (car actuals) currentenv) fenv) currentenv))))))
-                        paramlist (closure-paramlist closure) ((closure-env closure) currentstate) currentstate)                                                                                                                    
-                       currentstate)))
+                       (bind-params-byreference paramlist closure currentstate)                                                                                                                    
+                       currentstate
+                       handler)))
+
+; returns the function environment with the new parameter bindings
+(define bind-params-byreference
+  (lambda (paramlist closure currentstate)
+    (((lambda (m) (m m))
+      (lambda (f)
+        (lambda (actuals formals fenv currentenv)
+          (cond
+            ((and (null? actuals) (null? formals)) fenv)
+            ((or (null? actuals) (null? formals)) (myerror 'BindParamsByReference "Actual and Formal Parameter lists differ in length" actuals))
+            (else ((f f) (cdr actuals) (cdr formals) (state-add-binding (car formals) (m-value (car actuals) currentenv) fenv) currentenv))))))
+     paramlist (closure-paramlist closure) ((closure-env closure) currentstate) currentstate)))
 
 (define evaluate-function
-  (lambda (fbody fenv oldstate)
-    ((lambda (funcRetVal)
-      (cond
-         ((number? funcRetVal) funcRetVal)
-         ((boolsym? funcRetVal) funcRetVal)
-         ((bool? funcRetVal) (bool2sym funcRetVal))
-         (else (myerror 'EvaluateFunction "Unknown return type:" funcRetVal))));noValue)))
-    (old-interpret2 fbody fenv))))
-
+  (lambda (fbody fenv oldstate handler)
+    (interpret-function fbody fenv handler)))
+     
+(define check-func-return
+  (lambda (funcRetVal)
+    (cond
+      ((number? funcRetVal) funcRetVal)
+      ((boolsym? funcRetVal) funcRetVal)
+      ((bool? funcRetVal) (bool2sym funcRetVal))
+      (else (myerror 'EvaluateFunction "Unknown return type:" funcRetVal)))))
+  
+; not used.
 (define bind-params-byname
   (lambda (actuals formals body state)
     (letrec ((loop (lambda (evaluated formals body)
