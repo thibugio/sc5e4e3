@@ -17,7 +17,7 @@
 (define default-brk (lambda (s) (myerror 'break "Break or Continue outside of Loop" s)));(error 'break "Break or Continue outside of while loop")))
 (define default-throw (lambda (e s) (myerror 'throw "Throw without Catch" s)));(error 'throw "Throw without Catch")))
 ; general error handlers with 1 and 2 params
-(define err1 (lambda (s) (myerror 'Error "Error" (print s))))
+(define err1 (lambda (s) (myerror 'Error "Error!" s)))
 (define err2 (lambda (e s) (err1 s)))
 
 ;=======================================
@@ -201,7 +201,12 @@
 (define m-state
     (lambda (statement state break continue throw prog-return)
         (cond
-          ((not (list? statement)) state) ;true or false, e.g.
+          ((not (list? statement))
+           (if (or (number? (m-value statement state))
+                   (bool? (m-value statement state))
+                   (eq? noValue statement))
+               state
+               (myerror 'Mstate "Unknown statement type" statement)))
           ((eq? 'var (get-operator statement)) (m-state-var statement state break continue throw prog-return))
           ((eq? '= (get-operator statement)) (m-state-assign statement state break continue throw prog-return))
           ((eq? 'if (get-operator statement)) (m-state-if statement state break continue throw prog-return))
@@ -216,7 +221,7 @@
                (comp-op? (get-operator statement))) (m-state (get-operand2 statement) (m-state (get-operand1 statement) state break continue throw prog-return) break continue throw prog-return))
           ((eq? 'function (get-operator statement)) (m-state-funcdef statement state break continue throw prog-return))
           ((eq? 'funcall (get-operator statement)) (prog-return (m-value statement state)))
-          (else state))))
+          (else (myerror 'Mstate "Unknown statement type" statement)))))
 
 ; bind a function name to its closure, where the closure consists of the formal parameter list,
 ; the function body, and a function that creates the function environment from the current environment
@@ -226,9 +231,10 @@
         (myerror 'MstateFunctionBinding "Function already declared in this scope" state)
         (state-add-binding (funcdef-name statement) (create-function-closure statement) state))))
 
-(define m-state-break (lambda (state break) (break state)))
 
+(define m-state-break (lambda (state break) (break state)))
 (define m-state-continue (lambda (state continue) (continue state)))
+
 
 (define m-state-throw
   (lambda (statement state throw)
@@ -316,35 +322,6 @@
                          (bool2sym (m-bool (return-expr statement) state))
                          (m-value (return-expr statement) state)))))
 (define return-expr cadr)
-(define bool2sym
-  (lambda (b)
-    (if b
-        'true
-        'false)))
-(define bool?
-  (lambda (sym)
-    ((eq? 'true sym) #t)
-    ((eq? 'false sym) #t)
-    (else #f)))
-(define bool-op2?
-  (lambda (sym)
-    (cond
-      ((eq? '&& sym) #t)
-      ((eq? '|| sym) #t)
-      (else #f))))
-(define bool-op1?
-  (lambda (sym)
-    (eq? '! sym)))
-(define comp-op?
-  (lambda (sym)
-    (cond
-      ((eq? '== sym) #t)
-      ((eq? '!= sym) #t)
-      ((eq? '>= sym) #t)
-      ((eq? '<= sym) #t)
-      ((eq? '> sym) #t)
-      ((eq? '< sym) #t)
-      (else #f))))
 
 
 (define m-state-while
@@ -368,7 +345,7 @@
     (lambda (statement state break continue throw prog-return)
       (cond
         ((state-lookup-inscope? (var-var statement) state) (error 'Mstate_var "Variable already declared"))
-        ((eq? 2 (len statement)) (state-add-binding (var-var statement) varInitVal state)) ; var <variable>;
+        ((eq? 2 (len statement)) (state-add-binding (var-var statement) varInitVal state)) ;(var <name>)
         ((and (list? (var-value statement))
                  (or (bool-op1? (get-operator (var-value statement)))
                      (bool-op2? (get-operator (var-value statement)))
@@ -376,9 +353,6 @@
         (else (state-add-binding (var-var statement) (m-value (var-value statement) state) state)))))
 (define var-var cadr)
 (define var-value caddr)
-(define len
-  (lambda (l)
-    (apply + (map (lambda (x) 1) l))))
 
 ;========================================
 ; Mbool
@@ -413,6 +387,40 @@
           ((eq? 'false condition) #f)
           ((state-lookup-inscope? condition state) (m-bool (state-get-value condition state) state))
           (else (error 'Mbool "Unknown atom"))))))
+
+(define bool2sym
+  (lambda (b)
+    (if b
+        'true
+        'false)))
+(define boolsym?
+  (lambda (sym)
+    (cond
+      ((eq? 'true sym) #t)
+      ((eq? 'false sym) #t)
+      (else #f))))
+(define bool?
+  (lambda (sym)
+    (or (eq? #t sym) (eq? #f sym))))
+(define bool-op2?
+  (lambda (sym)
+    (cond
+      ((eq? '&& sym) #t)
+      ((eq? '|| sym) #t)
+      (else #f))))
+(define bool-op1?
+  (lambda (sym)
+    (eq? '! sym)))
+(define comp-op?
+  (lambda (sym)
+    (cond
+      ((eq? '== sym) #t)
+      ((eq? '!= sym) #t)
+      ((eq? '>= sym) #t)
+      ((eq? '<= sym) #t)
+      ((eq? '> sym) #t)
+      ((eq? '< sym) #t)
+      (else #f))))
         
 ;========================================
 ; Mvalue 
@@ -438,73 +446,98 @@
                                                                          (m-state statement state default-brk default-brk default-throw default-brk))
                                                         (m-state statement state default-brk default-brk default-throw default-brk)))
             ((eq? 'funcall (get-operator statement)) (m-value-funcall statement state))
-            (else (error 'Mvalue "Unknown statement")))
+            (else (myerror 'Mvalue "Unknown statement" statement)))
        (cond
             ((number? statement) statement)
-            ((eq? varInitVal statement) (myerror 'Mvalue "Variable undefined" state))
+            ((eq? varInitVal statement) (myerror 'Mvalue "Variable undefined" statement))
+            ((or (eq? 'true statement) (eq? 'false statement)) statement)
             ((eq? noValue statement) state) ;void function return
-            ((or (eq? 'true statement) (eq? 'false statement)) statement) 
             ((state-lookup? statement state) (m-value (state-get-value statement state) state))
-            (else (myerror statement "Mvalue: Variable not declared" state))))))
+            (else (myerror 'Mvalue "Variable not declared" statement))))))
 
 ; evaluate a function call:
 ; 1. create the function environment from the current environment
 ; 2. evaluate each actual parameter in the current environment and
 ;    bind it to the formal parameter in the function environment
 ; 3. interpret the function body within the function environment
+;(define m-value-funcall
+;  (lambda (statement state)
+;    (if (state-lookup-func? (funcall-name statement) (funcall-paramlist statement) state)
+;        ((lambda (closure)
+;           (evaluate-function (bind-params (funcall-paramlist statement)
+;                                           (closure-paramlist closure)
+;                                           (closure-fbody closure)
+;                                           ((closure-env closure) state)
+;                                           state)
+;                              ((closure-env closure) state)
+;                              state))
+;         (state-get-value (funcall-name statement) state))
+;        (myerror (funcall-name statement) "Function not defined" state))))
+
+; do basic error-checking on the function call then evaluate the function
 (define m-value-funcall
   (lambda (statement state)
-    (if (state-lookup-func? (funcall-name statement) (funcall-paramlist statement) state) 
-        (evaluate-function (bind-params (funcall-paramlist statement)
-                                        (closure-paramlist (state-get-value (funcall-name statement) state))
-                                        (closure-fbody (state-get-value (funcall-name statement) state))
-                                        state)
-                           ((closure-env (state-get-value (funcall-name statement) state)) state))
-        (myerror (funcall-name statement) "Function not defined" state))))
+    (if (not (state-lookup? (funcall-name statement) state))
+        (myerror 'Mvalue_Funcall "Function not defined" (funcall-name statement))
+        (evaluate-function-byreference (funcall-paramlist statement) (state-get-value (funcall-name statement) state) state))))
+
+(define evaluate-function-byreference
+  (lambda (paramlist closure currentstate)
+    (evaluate-function (closure-fbody closure)
+                       (((lambda (m) (m m))
+                         (lambda (f)
+                           (lambda (actuals formals fenv currentenv)
+                             (cond
+                               ((and (null? actuals) (null? formals)) fenv)
+                               ((or (null? actuals) (null? formals)) (myerror 'EvaluateFunction "Actual and Formal Parameter lists differ in length" actuals))
+                               (else ((f f) (cdr actuals) (cdr formals) (state-add-binding (car formals) (m-value (car actuals) currentenv) fenv) currentenv))))))
+                        paramlist (closure-paramlist closure) ((closure-env closure) currentstate) currentstate)                                                                                                                    
+                       currentstate)))
 
 (define evaluate-function
-  (lambda (fbody fenv)
+  (lambda (fbody fenv oldstate)
     ((lambda (funcRetVal)
       (cond
          ((number? funcRetVal) funcRetVal)
          ((eq? 'true funcRetVal) #t)
          ((eq? 'false funcRetVal) #f)
-         (else noValue)))
+         (else (myerror 'EvaluateFunction "Unknown return type:" funcRetVal))));noValue)))
     (old-interpret2 fbody fenv))))
 
 ; evaluate a list of function parameters and return the evaluated list.
-(define evaluate-params
+(define evaluate-params-byreference
   (lambda (params state)
-    (m-value-list params state)))    
-
-; evaluate a list of expressions. return a list of the evaluated expressions.
-(define m-value-list
-  (lambda (l state) (map (lambda (x) (m-value x state)) l)))
+    (map (lambda (x)
+           (if (pair? x)
+               (m-value x state)
+               x)) ; don't evaluate symbolic variables, only expressions
+         params)))
 
 (define bind-params-byreference
+  (lambda (actuals formals body fenv currentstate)
+    ; try actually changing the state-- replace values of the formals with values of the actuals.
+    ; make a copy of the state before calling the function.
+    ; copy values into the original state when execution is finished.
+    (cond
+      ((and (null? actuals) (null? formals)) body)
+      (else noValue))))
+
+(define bind-params-byname
   (lambda (actuals formals body state)
     (letrec ((loop (lambda (evaluated formals body)
                      (cond
                        ((and (null? evaluated) (null? formals)) body)
                        ((or (null? evaluated) (null? formals)) (error 'BindParams "Actual and Formal parameter lists differ in length"))
                        ((and (eq? '& (car formals))
-                             (or (number? (car evaluated)) (eq? #t (car actuals)) (eq? #f (car actuals))))
+                             (or (number? (car evaluated)) (eq? #t (car evaluated)) (eq? #f (car evaluated))))
                              (error 'BindParams "Cannot pass a literal value as a reference"))
                         ((eq? '& (car formals)) (loop (cdr evaluated) (cddr formals) (replace*-cps (cadr formals) (car evaluated) body)))
                         (else (loop (cdr evaluated) (cdr formals) (replace*-cps (car formals) (car evaluated) body)))))))
-      (loop actuals formals body))))
+      (loop (evaluate-params-reference actuals state) formals body))))
 
 ; bind a list of actual parameters to a list of formal parameters.
 ;(define bind-params bind-params-byvalue)
-(define bind-params bind-params-byreference)
-
-(define do-param-substitution
-  (lambda (actuals formals body)
-    (cond
-      ((and (null? actuals) (null? formals)) body)
-      ((or (null? actuals) (null? formals)) (error 'BindParams "Actual and Formal parameter lists differ in length"))
-      (else (bind-params (cdr actuals) (cdr formals) (replace*-cps (car formals) (car actuals) body))))))
-    
+(define bind-params bind-params-byreference)    
 
 ;===================================
 ; Mname
@@ -514,7 +547,6 @@
         (if (state-lookup-inscope? variable state)
             variable
             (error 'Mname "Variable not found in the state"))))
-
 
 ;===================================
 ; New functions to handle functions
@@ -530,17 +562,11 @@
       ((eq? '= (get-operator (car parsetree))) (create-table (cdr parsetree) (do-global-var-assign (car parsetree) table)))
       (else (error 'CreateTable "Can only have variable/function declarations and variable assignments at global level")))))
 
-(define do-global-var-binding
-  (lambda (statement table) ; table==state@scope_0
-    (m-state-var statement table err1 err1 err2 err1)))
-(define do-global-var-assign
-  (lambda (statement table)
-    (m-state-assign statement table err1 err1 err2 err1)))
-(define do-global-func-binding
-  (lambda (statement table)
-    (m-state-funcdef statement table err1 err1 err2 err1)))
+(define do-global-var-binding (lambda (statement table) (m-state-var statement table err1 err1 err2 err1)))
+(define do-global-var-assign (lambda (statement table) (m-state-assign statement table err1 err1 err2 err1)))
+(define do-global-func-binding (lambda (statement table) (m-state-funcdef statement table err1 err1 err2 err1)))
 
-; create the function closure from the funtion statement: (function <name> (<args>) (<body>))
+; create the function closure from the funtion-definition statement: (function <name> (<args>) (<body>))
 (define create-function-closure
   (lambda (statement)
     (cons (funcdef-paramlist statement) (cons (funcdef-body statement) (cons (mk-create-func-env (funcdef-name statement)) '())))))
@@ -624,7 +650,9 @@
                           (else (loop (cdr l1) (cdr l2)))))))
          (loop l1 l2))))))
 
-
+(define len
+  (lambda (l)
+    (apply + (map (lambda (x) 1) l))))
 
 
 
