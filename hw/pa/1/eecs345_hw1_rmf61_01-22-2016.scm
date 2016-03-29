@@ -13,7 +13,6 @@
     (cond
       ((null? l) #t)
       ((null? (cdr l)) #t)
-      ((not (number? (car l))) #f)
       (else (and (<= (car l) (car (cdr l)))
                  (inorder? (cdr l)))))))
 
@@ -48,7 +47,6 @@
   (lambda (seq l)
     (cond
       ((or (null? l) (null? seq) ) l)
-      ((or (list? (car l)) (list? (car seq))) l) ;list or sequence does not contain only atoms
       ((eq? (car seq) (car l)) (removesubsequence (cdr seq) (cdr l)))
       (else (cons (car l) (removesubsequence seq (cdr l)))))))
 

@@ -5,23 +5,20 @@
 (load "functionParser.scm")
 
 ;======================================
-; error-handling:
+; error-handling: if debug==0, myerror will produce the intended error message; else it will produce
+; a real error, but the error message will include both arguments, plus the thing that gets printed.
 (define debug 1)
-(define myerror
-  (lambda (arg1 arg2 thingtoprint)
-  (if (zero? debug)
-      (error arg1 arg2); this will produce the nicely-formatted error message as intended
-      (error arg1 arg2 (print thingtoprint))))) ; this will produce a real error, but the error message will
-                                         ; still include both arguments, -and- the state gets printed.
-; default break/continue continuation
-(define default-brk (lambda (s) (myerror 'break "Break or Continue outside of Loop" s)));(error 'break "Break or Continue outside of while loop")))
+(define myerror (lambda (a1 a2 printme) (if (zero? debug) (error a1 a2) (error a1 a2 (print printme)))))
+; default continuations
+(define default-brk (lambda (s) (myerror 'break "Break outside of loop" s)));(error 'break "Break outside of loop")))
+(define default-con (lambda (s) (myerror 'continue "Continue outside of loop" s)));(error 'continue "Continue outside of loop")))
 (define default-throw (lambda (e s) (myerror 'throw "Throw without Catch" s)));(error 'throw "Throw without Catch")))
 (define default-ret (lambda (v s) (myerror 'return "Return statement" v)))
 ; general error handlers with 1 and 2 params
 (define err1 (lambda (s) (myerror 'Error "Error!" s)))
 (define err2 (lambda (e s) (err1 s)))
 
-; global definitions
+; constants
 (define empty-state '())
 (define empty-scope-state '(()()))
 (define varInitVal 'Undefined)
@@ -33,11 +30,12 @@
 
 (define interpret
   (lambda (f)
-    (call/cc
-     (lambda (break)
-       (let ((do-interpret (lambda (return)
-                             (return (m-value '(funcall main) (create-table (parser f) empty-state))))))
-         (do-interpret (lambda (v) (break v))))))))
+    (m-value '(funcall main) (create-table (parser f) empty-state))))
+    ;(call/cc
+    ; (lambda (break)
+    ;   (let ((do-interpret (lambda (return)
+    ;                         (return (m-value '(funcall main) (create-table (parser f) empty-state))))))
+    ;     (do-interpret (lambda (v) (break v))))))))
 
 ; same as interpret function from Project 2, but takes a parsetree directly instead of a file, and an initial state
 ;(define old-interpret2
@@ -45,14 +43,13 @@
 ;      (call/cc
 ;       (lambda (break)
 ;         (let ((do-interpret (lambda (return)
-;                               (run-state parsetree state default-brk default-brk default-throw return))))
+;                               (run-state parsetree state default-brk default-con default-throw return))))
 ;           (do-interpret (lambda (v s) (break v))))))))
 (define interpret-function
   (lambda (parsetree state return)
-    (run-state parsetree state default-brk default-brk default-throw return))) 
+    (run-state parsetree state default-brk default-con default-throw return))) 
 
 ; takes a parse tree 't' and initial state 's' and returns the program state
-; Formally, a parse tree is a list where each sublist corresponds to a statement.
 (define run-state
     (lambda (pt state break continue throw prog-return)
       (if (null? pt)
@@ -60,13 +57,6 @@
           (run-state (cdr pt)
                      (m-state (car pt) state break continue throw prog-return)
                      break continue throw prog-return))))
-
-(define parsetree-pop cdr)
-(define parsetree-peek car)
-
-(define get-operator car)
-(define get-operand1 cadr)
-(define get-operand2 caddr)
 
 ;===================================
 ; state manipulation functions
@@ -101,10 +91,22 @@
 ; return a list of all but the first value in the first scope of the state
 (define state-rest-vals (lambda (s) (cdadr (state-peek-scope s))))
 
+; return the global (outermost/last) scope of a state
+(define state-global-scope
+  (lambda (s)
+    (if (or (empty-state? s) (empty-state? (state-pop-scope s)))
+        s
+        (state-global-scope (state-pop-scope s)))))
+      
+
 ; return a list of all variables in the first scope of the state
 (define state-all-vars (lambda (s) (car (state-peek-scope s))))
 ; return a list of all values in the first scope of the state
 (define state-all-vals (lambda (s) (cadr (state-peek-scope s))))
+; return a list of all variables in the last (outermost/global) scope of the state
+(define state-all-global-vars (lambda (s) (state-all-vars (state-global-scope s))))
+; return a lsit of all values in the last (outermost/global) scope of the state
+(define state-all-global-vals (lambda (s) (state-all-vals (state-global-scope s))))
 
 ; remove the first (variable, value) in the first scope of the state and return the new state
 ; should NOT pop the scope!
@@ -231,6 +233,10 @@
           ((state-lookup? statement state) state)
           (else (myerror 'Mstate "Unknown atom" statement))))))
 
+(define get-operator car)
+(define get-operand1 cadr)
+(define get-operand2 caddr)
+
 ; bind a function name to its closure, where the closure consists of the formal parameter list,
 ; the function body, and a function that creates the function environment from the current environment
 (define m-state-funcdef
@@ -239,15 +245,19 @@
         (myerror 'MstateFunctionBinding "Function already declared in this scope" state)
         (state-add-binding (funcdef-name statement) (create-function-closure statement) state))))
 
-
+; interpret the function and copy the global variable values back to the original state
 (define m-state-funcall
   (lambda (statement state break continue throw prog-return)
-    (if (not (state-lookup? (funcall-name statement) state))
-        (myerror 'Mvalue_Funcall "Function not defined" (funcall-name statement))
-        (evaluate-function-byreference (funcall-paramlist statement)
-                                       (state-get-value (funcall-name statement) state)
-                                       state
-                                       (lambda (v s) (state-pop-scope s))))))
+    (call/cc
+     (lambda (break)
+       (let ((do-m-state-funcall (lambda (statement state)
+                                   (if (not (state-lookup? (funcall-name statement) state))
+                                       (myerror 'Mvalue_Funcall "Function not defined" (funcall-name statement))
+                                       (evaluate-function-byreference (funcall-paramlist statement)
+                                                                      (state-get-value (funcall-name statement) state)
+                                                                      state
+                                                                      (lambda (v s) (break (global-var-copy s state))))))));(lambda (v s) (break (state-pop-scope s))))))))
+         (do-m-state-funcall statement state))))))
 
 
 (define m-state-break (lambda (state break) (break state)))
@@ -299,16 +309,19 @@
 
 (define m-state-assign
   (lambda (statement state break continue throw prog-return)
-    (cond
-      ((not (state-lookup? (assign-var statement) state)) (error 'Mstate_assign "variable has not been declared"))
-      (else (letrec ((original-state state)
-                     (loop (lambda (statement state return)
-                             (if (state-lookup-inscope? (assign-var statement) state)
-                                 (return (state-add-binding (assign-var statement)
-                                                            (m-value (assign-expr statement) original-state)
-                                                            (state-rem-binding (assign-var statement) state)))
-                                 (loop statement (state-pop-scope state) (lambda (v) (return (cons (state-peek-scope state) v))))))))
-              (loop statement state (lambda (v) v)))))))
+    (state-assign (assign-var statement) (m-value (assign-expr statement) state) state)))
+(define state-assign
+  (lambda (var value state)
+    (if (not (state-lookup? var state))
+        (myerror 'StateAssign "variable has not been declared" var)
+        (((lambda (m) (m m))
+          (lambda (f)
+            (lambda (var value s ret)
+              (if (state-lookup-inscope? var s)
+                  (ret (state-add-binding var value (state-rem-binding var s)))
+                  ((f f) var value (state-pop-scope s) (lambda (v) (ret (cons (state-peek-scope s) v))))))))
+         var value state (lambda (v) v)))))
+      
 (define assign-var cadr)
 (define assign-expr caddr)
 
@@ -316,14 +329,14 @@
 (define m-state-if
     (lambda (statement state break continue throw prog-return)
         (cond 
-            ((m-bool (if-cond statement) (m-state (if-cond statement) state default-brk default-brk default-brk default-brk))
+            ((m-bool (if-cond statement) (m-state (if-cond statement) state default-brk default-con default-throw default-ret))
              (m-state (if-then statement)
-                      (m-state (if-cond statement) state default-brk default-brk default-brk default-brk)
+                      (m-state (if-cond statement) state default-brk default-con default-throw default-ret)
                       break continue throw prog-return))
             ((eq? 3 (len statement)) state) ; no optional-else-statement
             (else
              (m-state (if-optelse statement)
-                      (m-state (if-cond statement) state default-brk default-brk default-brk default-brk)
+                      (m-state (if-cond statement) state default-brk default-con default-throw default-ret)
                       break continue throw prog-return)))))
 (define if-cond cadr)
 (define if-then caddr)
@@ -340,7 +353,7 @@
                                   (comp-op? (get-operator (return-expr statement)))))
                          (bool2sym (m-bool (return-expr statement) state))
                          (m-value (return-expr statement) state))
-                     state)));(m-state (return-expr statement) state break continue throw prog-return))))
+                     (m-state (return-expr statement) state break continue throw prog-return))));state)));
 (define return-expr cadr)
 
 
@@ -349,13 +362,13 @@
     (call/cc
      (lambda (brk)
        (letrec ((loop (lambda (statement state)
-                        (if (m-bool (while-cond statement) (m-state (while-cond statement) state default-brk default-brk default-throw default-brk))
+                        (if (m-bool (while-cond statement) (m-state (while-cond statement) state default-brk default-con default-throw default-ret))
                             (loop statement (m-state (while-stmt statement)
-                                                     (m-state (while-cond statement) state default-brk default-brk default-throw default-brk)
+                                                     (m-state (while-cond statement) state default-brk default-con default-throw default-ret)
                                                      (lambda (s) (brk s))
                                                      (lambda (s) (brk (loop statement s)))
                                                      throw prog-return))
-                            (m-state (while-cond statement) (m-state (while-cond statement) state default-brk default-brk default-throw default-brk) default-brk default-brk default-throw default-brk)))))
+                            (m-state (while-cond statement) (m-state (while-cond statement) state default-brk default-con default-throw default-ret) default-brk default-con default-throw default-ret)))))
          (loop statement state))))))                            
 (define while-cond cadr)
 (define while-stmt caddr)
@@ -475,12 +488,16 @@
 ; do basic error-checking on the function call then evaluate the function
 (define m-value-funcall
   (lambda (statement state)
-    (if (not (state-lookup? (funcall-name statement) state))
-        (myerror 'Mvalue_Funcall "Function not defined" (funcall-name statement))
-        (evaluate-function-byreference (funcall-paramlist statement)
-                                       (state-get-value (funcall-name statement) state)
-                                       state
-                                       (lambda (v s) (check-func-return v))))))
+    (call/cc
+     (lambda (break)
+       (let ((do-m-value-funcall (lambda (statement state)
+                                   (if (not (state-lookup? (funcall-name statement) state))
+                                       (myerror 'Mvalue_Funcall "Function not defined" (funcall-name statement))
+                                       (evaluate-function-byreference (funcall-paramlist statement)
+                                                                      (state-get-value (funcall-name statement) state)
+                                                                      state
+                                                                      (lambda (v s) (break (check-func-return v))))))))
+         (do-m-value-funcall statement state))))))
 
 ; evaluate a function-call by-reference.
 ; evaluate the actuals parameters in the current context.
@@ -503,8 +520,12 @@
           (cond
             ((and (null? actuals) (null? formals)) fenv)
             ((or (null? actuals) (null? formals)) (myerror 'BindParamsByReference "Actual and Formal Parameter lists differ in length" actuals))
+            ((and (eq? '& (car formals))
+                  (or (number? (car evaluated)) (bool? (car evaluated)) (boolsym? (car evaluated))))
+             (error 'BindParamsByReference "Cannot pass a literal value as a reference"))
+            ((eq? '& (car formals)) ((f f) (cdr actuals) (cddr formals) fenv currentenv)) ;TODO
             (else ((f f) (cdr actuals) (cdr formals) (state-add-binding (car formals) (m-value (car actuals) currentenv) fenv) currentenv))))))
-     paramlist (closure-paramlist closure) ((closure-env closure) currentstate) currentstate)))
+     paramlist (closure-paramlist closure) (state-push-scope ((closure-env closure) currentstate)) currentstate)))
 
 (define evaluate-function
   (lambda (fbody fenv oldstate handler)
@@ -516,21 +537,7 @@
       ((number? funcRetVal) funcRetVal)
       ((boolsym? funcRetVal) funcRetVal)
       ((bool? funcRetVal) (bool2sym funcRetVal))
-      (else (myerror 'EvaluateFunction "Unknown return type:" funcRetVal)))))
-  
-; not used.
-(define bind-params-byname
-  (lambda (actuals formals body state)
-    (letrec ((loop (lambda (evaluated formals body)
-                     (cond
-                       ((and (null? evaluated) (null? formals)) body)
-                       ((or (null? evaluated) (null? formals)) (error 'BindParams "Actual and Formal parameter lists differ in length"))
-                       ((and (eq? '& (car formals))
-                             (or (number? (car evaluated)) (eq? #t (car evaluated)) (eq? #f (car evaluated))))
-                             (error 'BindParams "Cannot pass a literal value as a reference"))
-                        ((eq? '& (car formals)) (loop (cdr evaluated) (cddr formals) (replace*-cps (cadr formals) (car evaluated) body)))
-                        (else (loop (cdr evaluated) (cdr formals) (replace*-cps (car formals) (car evaluated) body)))))))
-      (loop (evaluate-params-reference actuals state) formals body))))    
+      (else (myerror 'EvaluateFunction "Unknown return type:" funcRetVal)))))    
 
 ;===================================
 ; Mname
@@ -550,19 +557,16 @@
   (lambda (parsetree table)
     (cond
       ((null? parsetree) table)
-      ((eq? 'var (get-operator (car parsetree))) (create-table (cdr parsetree) (do-global-var-binding (car parsetree) table)))
-      ((eq? 'function (get-operator (car parsetree))) (create-table (cdr parsetree) (do-global-func-binding (car parsetree) table)))
-      ((eq? '= (get-operator (car parsetree))) (create-table (cdr parsetree) (do-global-var-assign (car parsetree) table)))
-      (else (error 'CreateTable "Can only have variable/function declarations and variable assignments at global level")))))
-
-(define do-global-var-binding (lambda (statement table) (m-state-var statement table err1 err1 err2 err1)))
-(define do-global-var-assign (lambda (statement table) (m-state-assign statement table err1 err1 err2 err1)))
-(define do-global-func-binding (lambda (statement table) (m-state-funcdef statement table err1 err1 err2 err1)))
+      ((or (eq? 'var (get-operator (car parsetree))) 
+           (eq? 'function (get-operator (car parsetree)))) 
+       (create-table (cdr parsetree) (m-state (car parsetree) table default-brk default-con default-throw default-ret)))
+      (else (error 'CreateTable "Can only have variable/function declarations at global level")))))
 
 ; create the function closure from the funtion-definition statement: (function <name> (<args>) (<body>))
 (define create-function-closure
   (lambda (statement)
-    (cons (funcdef-paramlist statement) (cons (funcdef-body statement) (cons (mk-create-func-env (funcdef-name statement)) '())))))
+    (cons (funcdef-paramlist statement) (cons (funcdef-body statement)
+                                              (cons (mk-create-func-env (funcdef-name statement)) '())))))
 
 ; return a function to create the function environment from the current environment
 (define mk-create-func-env
@@ -570,9 +574,20 @@
     ((lambda (m) (m m))
      (lambda (r)
        (lambda (currentstate)
-         (state-push-scope (if (state-lookup-inscope? fname currentstate)
-                               currentstate
-                               ((r r) (state-pop-scope currentstate)))))))))
+         (if (state-lookup-inscope? fname currentstate)
+                               currentstate;(state-push-scope currentstate); done by bind-params now
+                               ((r r) (state-pop-scope currentstate))))))))
+
+; copy global variables from function environment to current environment
+(define global-var-copy
+  (lambda (fenv currentstate)
+    (((lambda (m) (m m))
+      (lambda (f)
+        (lambda (vars state)
+          (if (null? vars)
+              state
+              ((f f) (cdr vars) (state-assign (car vars) (state-get-value (car vars) fenv) state))))))
+     (state-all-global-vars currentstate) currentstate)))
 
 ; for a function-call statement: (funcall name [args])
 (define funcall-name (lambda (statement) (cadr statement)))
