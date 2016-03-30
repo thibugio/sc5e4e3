@@ -113,6 +113,28 @@
               ((f f) (state-pop-scope state) (lambda (v) (ret (myappend (state-all-vars state) v))))))))
      s (lambda (v) v))))
 
+; return a list of all varialbe in all scopes of the second state, which are not in the immediate scope of the first state
+; (i.e., variables in the second state which the first state has not redefined)
+(define state-all-vars-not-inscope*
+  (lambda (s1 s2)
+    (((lambda (m) (m m))
+      (lambda (f)
+        (lambda (state1 state2 ret)
+          (cond
+            ((empty-state? state1) (state-all-vars* state2));break
+            ((empty-state? state2) (ret '()))
+            (else (((lambda (n) (n n))
+                    (lambda (g)
+                      (lambda (s2-inscope-vars s1 s2 ret)
+                        (cond
+                          ((null? s2-inscope-vars) (ret '()))
+                          ((and (state-lookup? (car s2-inscope-vars) s1)
+                                (not (state-lookup-inscope? (car s2-inscope-vars) s1)))
+                           ((g g) (cdr s2-inscope-vars) s1 s2 (lambda (v) (ret (cons (car s2-inscope-vars) v)))))
+                          (else ((g g) (cdr s2-inscope-vars) s1 s2 ret))))))
+                   (state-all-vars s2) s1 s2 (lambda (v) v)))))))
+     s1 s2 (lambda (v) v))))
+
 ; remove the first (variable, value) in the first scope of the state and return the new state
 ; should NOT pop the scope!
 (define state-pop-binding 
@@ -222,19 +244,21 @@
           ((eq? 'throw (get-operator statement)) (m-state-throw statement state throw))
           ((eq? 'try (get-operator statement)) (m-state-tcf statement state break continue throw prog-return))
           ((or (bool-op2? (get-operator statement))
-               (comp-op? (get-operator statement))) (m-state (get-operand2 statement) (m-state (get-operand1 statement) state break continue throw prog-return) break continue throw prog-return))
+               (comp-op? (get-operator statement))) (m-state (get-operand2 statement) 
+                                                             (m-state (get-operand1 statement) state break continue throw prog-return) 
+                                                             break continue throw prog-return))
           ((bool-op1? (get-operator statement)) (m-state (get-operand1 statement) state break continue throw prog-return))
           ((eq? 'function (get-operator statement)) (m-state-funcdef statement state break continue throw prog-return))
           ((eq? 'funcall (get-operator statement)) (m-state-funcall statement state break continue throw prog-return))
           (else state));(else (myerror 'Mstate "Unknown statement" statement)))
         (cond
-          ((number? (m-value statement state break continue throw prog-return)) state)
-          ((boolsym? (m-value statement state break continue throw prog-return)) state)
-          ((bool? (m-value statement state break continue throw prog-return)) state)
-          ((eq? noValue statement) state)
-          ((state-lookup? statement state) state)
+          ((or (number? (m-value statement state break continue throw prog-return))
+               (boolsym? (m-value statement state break continue throw prog-return))
+               (bool? (m-value statement state break continue throw prog-return))
+               (eq? noValue statement)
+               (state-lookup? statement state))
+            state)
           (else (myerror 'Mstate "Unknown atom" statement))))))
-
 (define get-operator car)
 (define get-operand1 cadr)
 (define get-operand2 caddr)
@@ -251,7 +275,7 @@
 (define m-state-funcall
   (lambda (statement state break continue throw prog-return)
     (call/cc
-     (lambda (break)
+     (lambda (mstatebreak)
        (let ((do-m-state-funcall (lambda (statement state)
                                    (if (not (state-lookup? (funcall-name statement) state))
                                        (myerror 'Mvalue_Funcall "Function not defined" (funcall-name statement))
@@ -261,7 +285,7 @@
                                                                       break
                                                                       continue
                                                                       (lambda (e s) (throw e (global-vars-copy s state)))
-                                                                      (lambda (v s) (break (all-vars-copy s state))))))));(global-vars-copy s state))))))));(lambda (v s) (state-pop-scope s))))))
+                                                                      (lambda (v s) (mstatebreak (all-vars-copy s state))))))));(global-vars-copy s state))))))));(lambda (v s) (state-pop-scope s))))))
          (do-m-state-funcall statement state))))))
 
 (define m-state-break (lambda (state break) (break state)))
@@ -313,7 +337,9 @@
 ; update the state to reflect a new variable binding (= varname value)
 (define m-state-assign
   (lambda (statement state break continue throw prog-return)
-    (state-assign (assign-var statement) (m-value (assign-expr statement) state break continue throw prog-return) state)))
+    (state-assign (assign-var statement)
+                  (m-value (assign-expr statement) state break continue throw prog-return)
+                  (m-state (assign-expr statement) state break continue throw prog-return))));state)))
 (define state-assign
   (lambda (var value state)
     (if (not (state-lookup? var state))
@@ -496,7 +522,7 @@
 (define m-value-funcall
   (lambda (statement state break continue throw prog-return)
     (call/cc
-     (lambda (break)
+     (lambda (mvaluebreak)
        (let ((do-m-value-funcall (lambda (statement state break continue throw prog-return)
                                    (if (not (state-lookup? (funcall-name statement) state))
                                        (myerror 'Mvalue_Funcall "Function not defined" (funcall-name statement))
@@ -506,7 +532,7 @@
                                                                       break
                                                                       continue
                                                                       (lambda (e s) (throw e (global-vars-copy s state)))
-                                                                      (lambda (v s) (break (check-func-return v))))))))
+                                                                      (lambda (v s) (mvaluebreak (check-func-return v))))))))
          (do-m-value-funcall statement state break continue throw prog-return))))))
 
 ; evaluate a function-call by-reference.
@@ -712,7 +738,3 @@
 
 ; get the (flat) length of a list
 (define len (lambda (l) (apply + (map (lambda (x) 1) l))))
-
-
-
-
