@@ -113,27 +113,53 @@
               ((f f) (state-pop-scope state) (lambda (v) (ret (myappend (state-all-vars state) v))))))))
      s (lambda (v) v))))
 
-; return a list of all varialbe in all scopes of the second state, which are not in the immediate scope of the first state
+; return a list of all variables in all scopes of the second state, which are not in the immediate scope of the first state
 ; (i.e., variables in the second state which the first state has not redefined)
 (define state-all-vars-not-inscope*
   (lambda (s1 s2)
-    (((lambda (m) (m m))
-      (lambda (f)
+    (((lambda (m n) (m m n))
+      (lambda (f g)
         (lambda (state1 state2 ret)
           (cond
-            ((empty-state? state1) (state-all-vars* state2));break
+            ((empty-state? state1) (state-all-vars* state2))
             ((empty-state? state2) (ret '()))
-            (else (((lambda (n) (n n))
-                    (lambda (g)
-                      (lambda (s2-inscope-vars s1 s2 ret)
-                        (cond
-                          ((null? s2-inscope-vars) (ret '()))
-                          ((and (state-lookup? (car s2-inscope-vars) s1)
-                                (not (state-lookup-inscope? (car s2-inscope-vars) s1)))
-                           ((g g) (cdr s2-inscope-vars) s1 s2 (lambda (v) (ret (cons (car s2-inscope-vars) v)))))
-                          (else ((g g) (cdr s2-inscope-vars) s1 s2 ret))))))
-                   (state-all-vars s2) s1 s2 (lambda (v) v)))))))
+            (else ((g g) (state-all-vars s2) s1 s2 (lambda (v) v))))))
+      (lambda (g)
+        (lambda (s2-inscope-vars s1 s2 ret)
+          (cond
+            ((null? s2-inscope-vars) (ret '()))
+            ((and (state-lookup? (car s2-inscope-vars) s1)
+                  (not (state-lookup-inscope? (car s2-inscope-vars) s1)))
+             ((g g) (cdr s2-inscope-vars) s1 s2 (lambda (v) (ret (cons (car s2-inscope-vars) v)))))
+            (else ((g g) (cdr s2-inscope-vars) s1 s2 ret))))))
      s1 s2 (lambda (v) v))))
+
+; return the number of scope levels in a state
+(define num-scopes?
+  (lambda (s)
+    (if (empty-state? s)
+        0
+        (+ 1 (num-scopes? (state-pop-scope s))))))
+
+; a more correct version of the above?
+(define state-all-vars-not-inscope2*
+  (lambda (s1 s2)
+    (if (or (empty-state? s1) (empty-state? s2))
+        (state-all-vars* s2)
+        (((lambda (m n) (m m n))
+          (lambda (f g)
+            (lambda (state1 state2-vars nlevels ret)
+              (if (null? state2-vars)
+                  (ret '())
+                  ((f f g) state1 (cdr state2-vars) nlevels (lambda (v) (ret (append v ((g g) state1 (car state2-vars) nlevels))))))))
+          (lambda (g)
+            (lambda (state var nlevels)
+              (cond
+                ((<= nlevels 0) (cons var '())) ;var not redefined in the top nlevels of the state. good to return.
+                ((state-lookup-inscope? var state) '()) ;var redefined
+                (else ((g g) (state-pop-scope state) var (- nlevels 1)))))))
+         s1 (state-all-vars* s2) (- (num-scopes? s1) (num-scopes? s2)) (lambda (v) v)))))
+    
 
 ; remove the first (variable, value) in the first scope of the state and return the new state
 ; should NOT pop the scope!
@@ -284,8 +310,8 @@
                                                                       state
                                                                       break
                                                                       continue
-                                                                      (lambda (e s) (throw e (global-vars-copy s state)))
-                                                                      (lambda (v s) (mstatebreak (all-vars-copy s state))))))));(global-vars-copy s state))))))));(lambda (v s) (state-pop-scope s))))))
+                                                                      (lambda (e s) (throw e (vars-not-inscope-copy s state)))
+                                                                      (lambda (v s) (mstatebreak (vars-not-inscope-copy s state))))))));(all-vars-copy s state))))))));(global-vars-copy s state))))))));(lambda (v s) (state-pop-scope s))))))
          (do-m-state-funcall statement state))))))
 
 (define m-state-break (lambda (state break) (break state)))
@@ -531,7 +557,7 @@
                                                                       state
                                                                       break
                                                                       continue
-                                                                      (lambda (e s) (throw e (global-vars-copy s state)))
+                                                                      (lambda (e s) (throw e (vars-not-inscope-copy s state)))
                                                                       (lambda (v s) (mvaluebreak (check-func-return v))))))))
          (do-m-value-funcall statement state break continue throw prog-return))))))
 
@@ -656,6 +682,9 @@
 (define all-vars-copy
   (lambda (fenv currentstate)
     (environment-var-copy fenv currentstate (state-all-vars* currentstate))))
+(define vars-not-inscope-copy
+  (lambda (fenv currentstate)
+    (environment-var-copy fenv currentstate (state-all-vars-not-inscope2* fenv currentstate))))
 
 ; for a function-call statement: (funcall name [args])
 (define funcall-name (lambda (statement) (cadr statement)))
