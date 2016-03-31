@@ -113,27 +113,6 @@
               ((f f) (state-pop-scope state) (lambda (v) (ret (myappend (state-all-vars state) v))))))))
      s (lambda (v) v))))
 
-; return a list of all variables in all scopes of the second state, which are not in the immediate scope of the first state
-; (i.e., variables in the second state which the first state has not redefined)
-(define state-all-vars-not-inscope*
-  (lambda (s1 s2)
-    (((lambda (m n) (m m n))
-      (lambda (f g)
-        (lambda (state1 state2 ret)
-          (cond
-            ((empty-state? state1) (state-all-vars* state2))
-            ((empty-state? state2) (ret '()))
-            (else ((g g) (state-all-vars s2) s1 s2 (lambda (v) v))))))
-      (lambda (g)
-        (lambda (s2-inscope-vars s1 s2 ret)
-          (cond
-            ((null? s2-inscope-vars) (ret '()))
-            ((and (state-lookup? (car s2-inscope-vars) s1)
-                  (not (state-lookup-inscope? (car s2-inscope-vars) s1)))
-             ((g g) (cdr s2-inscope-vars) s1 s2 (lambda (v) (ret (cons (car s2-inscope-vars) v)))))
-            (else ((g g) (cdr s2-inscope-vars) s1 s2 ret))))))
-     s1 s2 (lambda (v) v))))
-
 ; return the number of scope levels in a state
 (define num-scopes?
   (lambda (s)
@@ -141,8 +120,9 @@
         0
         (+ 1 (num-scopes? (state-pop-scope s))))))
 
-; a more correct version of the above?
-(define state-all-vars-not-inscope2*
+; return a list of all variables in all scopes of the second state, which are not in the new scopes of the first state
+; (i.e., variables in the second state which the first state has not redefined)
+(define state-all-vars-not-inscope*
   (lambda (s1 s2)
     (if (or (empty-state? s1) (empty-state? s2))
         (state-all-vars* s2)
@@ -156,7 +136,8 @@
             (lambda (state var nlevels)
               (cond
                 ((<= nlevels 0) (cons var '())) ;var not redefined in the top nlevels of the state. good to return.
-                ((state-lookup-inscope? var state) '()) ;var redefined
+                ((not (state-lookup? var state)) (cons var '())) ;don't need to return this as a variable that needs to be updated, but that goes against the contract of this general method.
+                ((state-lookup-inscope? var state) '()) ;var has been redefined
                 (else ((g g) (state-pop-scope state) var (- nlevels 1)))))))
          s1 (state-all-vars* s2) (- (num-scopes? s1) (num-scopes? s2)) (lambda (v) v)))))
     
@@ -245,7 +226,7 @@
 (define state-get-value
     (lambda (variable state)
         (cond
-            ((empty-state? state) (error 'state-get-value "Variable not in State"))
+            ((empty-state? state) (myerror 'StateGetValue "Variable not in State" variable))
             ((empty-scope-state? (state-peek-scope state)) (state-get-value variable (state-pop-scope state)))
             ((eq? variable (state-peek-var state)) (state-peek-val state))
             (else (state-get-value variable (state-pop-binding state))))))
@@ -674,6 +655,7 @@
         (lambda (fenv currentstate vars)
           (cond
             ((null? vars) currentstate)
+            ((or (not (state-lookup? (car vars) currentstate)) (not (state-lookup? (car vars) fenv))) ((f f) fenv currentstate (cdr vars)))
             ((list? (state-get-value (car vars) currentstate)) ((f f) fenv currentstate (cdr vars))) ; don't copy functions
             (else ((f f) fenv (state-assign (car vars) (state-get-value (car vars) fenv) currentstate) (cdr vars))))))))
 (define global-vars-copy
@@ -684,7 +666,7 @@
     (environment-var-copy fenv currentstate (state-all-vars* currentstate))))
 (define vars-not-inscope-copy
   (lambda (fenv currentstate)
-    (environment-var-copy fenv currentstate (state-all-vars-not-inscope2* fenv currentstate))))
+    (environment-var-copy fenv currentstate (state-all-vars-not-inscope* fenv currentstate))))
 
 ; for a function-call statement: (funcall name [args])
 (define funcall-name (lambda (statement) (cadr statement)))
