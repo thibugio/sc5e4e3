@@ -278,7 +278,7 @@
         (myerror 'MstateFunctionBinding "Function already declared in this scope" state)
         (state-add-binding (funcdef-name statement) (create-function-closure statement) state))))
 
-; interpret the function and copy the global variable values back to the original state README
+; interpret the function and copy the global variable values back to the original state
 (define m-state-funcall
   (lambda (statement state break continue throw prog-return)
     (call/cc
@@ -291,7 +291,7 @@
                                                                       state
                                                                       break
                                                                       continue
-                                                                      (lambda (e s) (throw e (vars-not-inscope-copy s state)))
+                                                                      (lambda (e s) (mstatebreak (throw e (vars-not-inscope-copy s state))))
                                                                       (lambda (v s) (mstatebreak (vars-not-inscope-copy s state))))))))
          (do-m-state-funcall statement state))))))
 
@@ -341,7 +341,7 @@
                             (state-pop-scope (run-state (cdr statement) (state-push-scope state) b c throw prog-return)))))
          (begin-scope (lambda (s) (brk (break (state-pop-scope s)))) (lambda (s) (brk (continue (state-pop-scope s))))))))))             
     
-; update the state to reflect a new variable binding (= varname value) README: STATE only in '19/20 works' commit
+; update the state to reflect a new variable binding (= varname value)
 (define m-state-assign
   (lambda (statement state break continue throw prog-return)
     (state-assign (assign-var statement)
@@ -409,7 +409,7 @@
 (define while-cond cadr)
 (define while-stmt caddr)
 
-; variable declaration (var varname [value]) ; STATE only in README:'19/20 works' commit
+; variable declaration (var varname [value])
 (define m-state-var
     (lambda (statement state break continue throw prog-return)
       (cond
@@ -526,7 +526,7 @@
 
 ; do basic error-checking on the function call then evaluate the function
 ; (m-value ...) does not update the state, so no need to copy the environment here.
-(define m-value-funcall ;README
+(define m-value-funcall
   (lambda (statement state break continue throw prog-return)
     (call/cc
      (lambda (mvaluebreak)
@@ -538,7 +538,7 @@
                                                                       state
                                                                       break
                                                                       continue
-                                                                      (lambda (e s) (throw e (vars-not-inscope-copy s state)))
+                                                                      (lambda (e s) (mvaluebreak (throw e (vars-not-inscope-copy s state))))
                                                                       (lambda (v s) (mvaluebreak (check-func-return v))))))))
          (do-m-value-funcall statement state break continue throw prog-return))))))
 
@@ -606,7 +606,6 @@
       ((number? funcRetVal) funcRetVal)
       ((boolsym? funcRetVal) funcRetVal)
       ((bool? funcRetVal) (bool2sym funcRetVal))
-      ((eq? noValue funcRetVal) funcRetVal)
       ((void? funcRetVal) noValue)
       (else (myerror 'EvaluateFunction "Unknown return type" funcRetVal)))))    
 
