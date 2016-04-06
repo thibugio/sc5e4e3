@@ -1,0 +1,75 @@
+EECS 345: Programming Language Concepts
+
+Programming Exercise 3
+
+Due Tuesday, April 12
+
+Part 1: C
+
+You are to write a program that has the following structures that implement a double linked list:
+
+The node structure consists of:
+an element (you can make this any type, but if you want your list to be general, make it void *)
+a pointer to the next node of the list
+a pointer to the previous node of the list
+The list structure consists of:
+a pointer to the first node of the list
+a pointer to the last node of the list
+Create the following functions:
+
+add_to_front takes an element and a list and it adds a new node containing the element to the front of the list
+add_to_back takes an element and a list and it adds a new node containing the element to the back of the list
+remove_from_front takes a list and removes (and frees) the node that was at the front of the list, and returns the element stored in that node.
+remove_from_back takes a list and removes (and frees) the node that was at the back of the list, and returns the element stored in that node.
+transfer takes two arrays, and int, and the pointer to two functions. The arrays will have the same type and length, and the int is the length of the arrays. The first function pointer points to an insert function and the second points to a remove function. The function does the following:
+creates a new empty linked list
+inserts each element of the first array, in order, into the list, using the insert function parameter
+until the list is empty, it calls the remove function to remove elements of the list and top place them into the second array, in order
+Create a main function that tests your transfer function. Create two arrays, one filled with appropriate data and the other empty. Call the transfer function on the two arrays and the methods add_to_front and remove_from_front. Print the contents of the second array. If correct, the contents should be reversed. Repeat this process 3 more times so you can test with all combinations of the add and remove functions.
+Part 2: Haskell Types
+
+While Haskell is similar to Scheme, Haskell's type rules prevent us from writing a function like the *-functions of the first Scheme homework. For example, we can't write the equivalent of (reverse* '(1 3 (4 ((5) ())) 6)) because a list can't contain both int types and list types as elements.
+
+You will fix this.
+
+Step 1: Create a type that allows us to have nested lists. Your type should have two kinds of values, elements and sublists. For example, the following will be a valid list:
+
+[Element 1,Element 3,SubList [Element 4,SubList [SubList [Element 5],SubList []]],Element 6]
+Step 2: Create the function flatten that takes a list as above and returns a list with just the elements.
+
+flatten [Element 1,Element 3,SubList [Element 4,SubList [SubList [Element 5],SubList []]],Element 6]
+[Element 1,Element 3,Element 4,Element 5,Element 6]
+Step 3: Create the function myreverse that takes a list as above and returns the list with all elements and sublists reversed.
+
+myreverse [Element 1,Element 3,SubList [Element 4,SubList [SubList [Element 5],SubList []]],Element 6]
+[Element 6,SubList [SubList [SubList [],SubList [Element 5]],Element 4],Element 3,Element 1]
+Optional Extra Challenge: Entering these lists is annoying, so create the function string2list that takes a string containing single digits and parentheses (possibly spaces or commas) and create a list.
+
+string2list "1 3 (4 ((5) ())) 6"
+[Element 1,Element 3,SubList [Element 4,SubList [SubList [Element 5],SubList []]],Element 6]
+Part 3: Haskell Monads
+
+Step 1: Using the Maybe monad of Haskell, create a function that has the following type:
+
+yourfunction :: a -> Maybe [a] -> (a -> Bool) -> Maybe [a]
+The function takes a value of some type, a list of the same type (as a monad), and a test function and returns a list (in a monad). If the character passes the test, the character is appended to the monad list. Otherwise the result is Nothing.
+Step 2: Using your above function, create a function checklist that takes a list and a function and returns Nothing if the elements in the list fail to past the function and the list (embedded in a Maybe) if all the elements pass.
+
+checklist "aaaaa" (\x -> x == 'a')
+Just "aaaaa"
+
+checklist "abcde" (\x -> (x >= 'a' && x <= 'z'))
+Just "abcde"
+
+checklist "abcDe" (\x -> (x >= 'a' && x <= 'z'))
+Nothing
+
+checklist [1,-2,3] (\x -> x > 0)
+Nothing
+Step 3: Create a function checkappend that takes two Maybe lists and a test function and appends the first list to the second only if all characters of the first list pass the test. The return is Nothing if any character of the first list does not pass the test. The second list does not have to pass a test.
+
+checkappend (Just [1,1,1]) (checkappend (Just [2,3,4]) (Just [8,9]) (\v -> v >= 0)) (\v -> v == 1)
+[1,1,1,2,3,4,8,9]
+
+checkappend (Just [1,1,1]) (checkappend (Just [2,3,4]) (Just [8,9]) (\v -> v <= 0)) (\v -> v == 1)
+Nothing
