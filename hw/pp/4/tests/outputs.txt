@@ -1,0 +1,14 @@
+Test 1 should return 15 when running A's main.
+Test 2 should return 12 when running A's main.
+Test 3 should return 125 when running A's main.
+Test 4 should return 36 when running A's main.
+Test 5 should return 54 when running A's main.
+Test 6 should return 110 when running A's main.
+Test 7 should return 26 when running C's main.
+Test 8 should return 117 when running Square's main.
+Test 9 should return 32 when running Square's main.
+Test 10 should return 15 when running List's main.
+Test 11 should return 123456 when running List's main
+Test 12 should return 5285 when running List's main.
+Test 13 should return -716 when run with C's main.
+
