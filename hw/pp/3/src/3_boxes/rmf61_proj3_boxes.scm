@@ -241,14 +241,14 @@
       (if (list? statement)
         (cond
           ((eq? 'var (get-operator statement)) (m-state-var statement state break continue throw prog-return))
-          ((eq? '= (get-operator statement)) (m-state-assign statement state break continue throw prog-return))
+          ((eq? '= (get-operator statement)) (m-state-assign statement state break continue throw prog-return) state)
           ((eq? 'if (get-operator statement)) (m-state-if statement state break continue throw prog-return))
           ((eq? 'while (get-operator statement)) (m-state-while statement state break continue throw prog-return))
           ((eq? 'return (get-operator statement)) (m-state-return statement state break continue throw prog-return))
           ((eq? 'begin (get-operator statement)) (m-state-begin-scope statement state break continue throw prog-return))
           ((eq? 'break (get-operator statement)) (m-state-break state break))
           ((eq? 'continue (get-operator statement)) (m-state-continue state continue))
-          ((eq? 'throw (get-operator statement)) (m-state-throw statement state throw))
+          ((eq? 'throw (get-operator statement)) (m-state-throw statement state break continue throw prog-return))
           ((eq? 'try (get-operator statement)) (m-state-tcf statement state break continue throw prog-return))
           ((or (bool-op2? (get-operator statement))
                (comp-op? (get-operator statement))) (m-state (get-operand2 statement) 
@@ -278,7 +278,7 @@
         (myerror 'MstateFunctionBinding "Function already declared in this scope" state)
         (state-add-binding (funcdef-name statement) (create-function-closure statement) state))))
 
-; interpret the function and copy the global variable values back to the original state README
+; interpret the function and copy the outer-scope variable values back to the original state README
 (define m-state-funcall
   (lambda (statement state break continue throw prog-return)
     (call/cc
@@ -300,8 +300,9 @@
 
 
 (define m-state-throw
-  (lambda (statement state throw)
-    (throw (except-stmt statement) state)))
+  (lambda (statement state break continue throw prog-return)
+    (throw (m-value (except-stmt statement) state break continue throw prog-return) state)));README no side-effects
+    ;(throw (m-value (except-stmt statement) state break continue throw prog-return) (m-state (except-stmt statement) state break continue throw prog-return)))
 (define except-stmt cadr)
 
 (define m-state-tcf
