@@ -1,9 +1,7 @@
 /* Rebecca Frederick
    EECS 345 
    Programming Exercise 3
-
    implements a doubly-linked list.
-
 */
 
 #include <stdlib.h>

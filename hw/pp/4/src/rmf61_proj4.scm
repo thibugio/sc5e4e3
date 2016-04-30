@@ -2,12 +2,11 @@
 ; EECS 345
 ; Programming Project 3
 
-(load "functionParser.scm")
+(load "classParser.scm")
 
 ;======================================
 (define debug 1)
-(define myerror (lambda (a1 a2 printme) (if (zero? debug)
-                                            (error a1 a2)
+(define myerror (lambda (a1 a2 printme) (if (zero? debug) (error a1 a2)
                                             (error (car (cons a1 (cons (display printme) (cons (display "\n") '())))) a2))))
 ; default continuations
 (define default-brk (lambda (s) (myerror 'break "Break outside of loop" s)));(error 'break "Break outside of loop")))
@@ -26,17 +25,15 @@
 (define noValue 'Void)
 
 ;=======================================
-; main interpreter function: takes the file name, and the name of the class whose main method will be run
+; main interpreter function: takes a file, and the name of the class whose main method will be run
+; now the global level of the parsetree will be only class definitions, and all execution will occur within a class
 (define interpret
-  (lambda (f class)
-    (call/cc
-     (lambda (break)
-       (let ((do-interpret (lambda (parsetree return)
-                             (m-value '(funcall main) (create-table parsetree empty-state) default-brk default-con default-throw return))))
-         (do-interpret (parser f) (lambda (v s) (break v))))))))
+  (lambda (f c) (interpret-general (m-value '(funcall main) ???STATE??? default-brk default-con default-throw (lambda (v s) v) (create-classtable (parser f) empty-state) c)))
 
-; interpreter function from Project 3
-(define interpret-p3
+; interpreter function from Project 3.
+; executes the main method found in the state produced by running through the global level of the parsetree
+; returns the value returned by main
+(define interpret-general
   (lambda (f)
     (call/cc
      (lambda (break)
@@ -239,6 +236,92 @@
             ((empty-scope-state? (state-peek-scope state)) (state-get-value variable (state-pop-scope state)))
             ((eq? variable (state-peek-var state)) (state-peek-val state))
             (else (state-get-value variable (state-pop-binding state))))))
+
+(define myappend
+  (lambda (l1 l2)
+    (((lambda (m) (m m))
+      (lambda (f)
+        (lambda (l1 l2 ret)
+          (if (null? l1)
+              (ret l2)
+              ((f f) (cdr l1) l2 (lambda (v) (ret (cons (car l1) v))))))))
+   l1 l2 (lambda (v) v))))
+
+; acts like myappend within var and value lists in first scope of the two states
+(define state-append-bindings
+  (lambda (s1 s2)
+    (((lambda (m) (m m))
+      (lambda (f)
+        (lambda (s1 s2 ret)
+          (if (or (empty-state? s1) (empty-scope-state? (state-peek-scope s1)))
+              (ret s2)
+              ((f f) (state-pop-binding s1) s2 (lambda (v) (ret (state-add-binding (state-peek-var s1) (state-peek-val s1) s2))))))))
+    s1 s2 (lambda (v) v))))
+    
+; class structure: '(this-class-name, parent-class-name, '((method (names) (closures))), '((static field (names) & (values))), '(instance field names), '((constructor (nargs) (closures)))
+(define makeclass
+  (lambda (name, supername, smethods, sstaticfields, linstancefields, sconstructors, state)
+    (cons name (cons supername (cons (myappend smethods (class-get-methods (state-get-classvalue supername state)))
+                                     (cons (state-append-bindings sstaticfields (class-get-staticfields (state-get-classvalue supername state)))
+                                           (cons (myappend linstancefields (class-get-instancenames (state-get-classvalue supername state)))
+                                                 (cons sconstructors
+                                                       (cons (len (state-all-vars smethods))
+                                                             (cons (len (state-all-vars sstaticfields))
+                                                                   (cons (len linstancefields) '()))))))))
+(define class-get-name (lambda (class) (car class)))
+(define class-get-supername (lambda (class) (cadr class)))
+(define class-get-methods (lambda (class) (car (cddr class))))
+(define class-get-staticfields (lambda (class) (cadr (cddr class))))
+(define class-get-staticfield-names (lambda (class) (state-all-vars (class-get-staticfields class))))
+(define class-get-staticfield-values (lambda (class) (state-all-vals (class-get-staticfields class))))
+(define class-get-instancenames (lambda (class) (car (cddr (cddr class)))))
+(define class-get-constructors (lambda (class) (cadr (cddr (cddr class)))))
+; indexes into joined lists
+(define class-get-mymethods (lambda (class) (first-n (car (cddr (cddr (cddr class)))) (class-get-methods class))))
+(define class-get-mystaticfields (lambda (class) (first-n (cadr (cddr (cddr (cddr class)))) (class-get-staticfields class))))
+(define class-get-myinstancenames (lambda (class) (first-n (car (cddr (cddr (cddr (cddr (class)))))) (class-get-instancenames class))))                                                                         
+
+; hide boxes from the rest of the code
+(define state-add-classbinding (lambda (class state) (state-add-binding (class-get-name class) (box class) state)))
+(define state-get-classvalue (lambda (classname state) (unbox (state-get-value classname state))))
+
+(define create-classtable
+  (lambda (parsetree s) ))
+
+; object structure: '(class-name '(instance field values))
+; makeobject takes a class (not a box!) and a list of constructor arguments. finds and runs the constructor with the same number of parameters
+(define makeobject
+  (lambda (class constructor-args state)
+    (cons (class-get-name class) (cons (get-common-elements (class-get-instancenames class) (run-constructors class constructor-args state)) '()))))
+; return a list of instance field values which is the result of calling super's constructor, then the class's constructor with the correct number of args
+; instead of starting with empty state for funcall, start with static fields plus instance fields initialized to varInitVal
+(define run-constructors
+  (lambda (o class args state)
+    (m-state ('funcall (find-constructor (class-get-constructors class) constructor-args) constructor-args)
+             (if (hassupercall (find-constructor (class-get-constructors class) constructor-args))
+                 (state-append-bindings (state-init (class-get-instancenames class))
+                                        (class-get-staticfields class))
+                 (state-append-bindings (state-init (class-get-myinstancenames class))
+                                        (state-append-bindings (class-get-mystaticfields class)
+                                                               (m-state ('funcall (find-constructor (class-get-constructors (state-get-classvalue (class-get-supername class) state)) '()) '())
+                                                                        (state-append-bindings (state-init (class-get-instancenames (state-get-classvalue (class-get-supername class) state)))
+                                                                                               (class-get-staticfields (state-get-classvalue (class-get-supername class) state)))
+                                                                        default-brk default-con default-throw default-ret o class))))
+             default-brk default-con default-throw default-ret o class)))
+    
+(define object-get-classname (lambda (o) (car o)))
+(define object-get-instancevals (lambda (o) (cadr o)))
+
+(define state-init
+  (lambda (varlist)
+    (((lambda (m) (m m))
+      (lambda (f)
+        (lambda (varlist acc)
+          (if (null? varlist)
+              acc
+              ((f f) (cdr varlist) (state-add-binding (car varlist) varInitVal acc))))))
+     varlist empty-state)))
+              
 
 ;=====================================
 ; Mstate 
@@ -760,3 +843,14 @@
 
 ; get the (flat) length of a list
 (define len (lambda (l) (apply + (map (lambda (x) 1) l))))
+
+(define first-n
+  (lambda (n l)
+    (((lambda (m) (m m))
+      (lambda (f)
+        (lambda (n l ret)
+          (cond
+            ((null? l) (ret '()))
+            ((zero? n) (ret '()))
+            (else ((f f) (- n 1) (cdr l) (lambda (v) (ret (cons (car l) v)))))))))
+     n l (lambda (v) v))))

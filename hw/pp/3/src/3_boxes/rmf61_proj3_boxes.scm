@@ -5,10 +5,9 @@
 (load "functionParser.scm")
 
 ;======================================
-; error-handling: if debug=0, myerror will produce the intended error message; else it will produce
-; a real error, but the error message will include both arguments, plus the thing that gets printed.
 (define debug 1)
-(define myerror (lambda (a1 a2 printme) (if (zero? debug) (error a1 a2) (error a1 a2 (print printme)))))
+(define myerror (lambda (a1 a2 printme) (if (zero? debug) (error a1 a2)
+                                            (error (car (cons a1 (cons (display printme) (cons (display "\n") '())))) a2))))
 ; default continuations
 (define default-brk (lambda (s) (myerror 'break "Break outside of loop" s)));(error 'break "Break outside of loop")))
 (define default-con (lambda (s) (myerror 'continue "Continue outside of loop" s)));(error 'continue "Continue outside of loop")))
@@ -27,12 +26,13 @@
 
 ;=======================================
 ; main interpreter function
+; the state is passed around in a box.
 (define interpret
   (lambda (f)
     (call/cc
      (lambda (break)
        (let ((do-interpret (lambda (parsetree return)
-                             (m-value '(funcall main) (create-table parsetree empty-state) default-brk default-con default-throw return))))
+                             (m-value '(funcall main) (create-table parsetree (box empty-state)) default-brk default-con default-throw return))))
          (do-interpret (parser f) (lambda (v s) (break v))))))))
 
 ; same as interpret function from Project 2, but takes a parsetree directly instead of a file,
@@ -55,6 +55,8 @@
 
 ;===================================
 ; state manipulation functions
+; all functions take a boxed state and either return a box, or return #<void> after operating on the box.
+; if using car/cdr directly on a state, make sure to use (get-state s) as the argument in case 's is a box.
 
 ; define program state as S = (((z, ...) (varInitVal, ...)) ((x, y, ...) (1, 2, ...))) =>
 ;   x:1:0, y:2:0, z:'Undefined:1,
@@ -62,29 +64,33 @@
 ; the second inner list records the value of the declared variables (in-order correspondence),
 ; and the outer list represents scope
 
+; return the actual state 
+(define get-state (lambda (s) (if (box? s) (unbox s) s)))
+
 ; check if scope-state is equal to empty-scope-state, since (eq? '(()) '(())) => #f
-(define empty-scope-state? (lambda (s) (null? (car s))))
-(define empty-state? (lambda (s) (null? s)))
+(define empty-scope-state? (lambda (s) (and (not (empty-state? (get-state s)))
+                                            (null? (car (get-state s))))))
+(define empty-state? (lambda (s) (null? (get-state s))))
 
 ; return the first scope in the state ( ->( (x,y,z) (1,2,3) )  ( (q,r,s) (4,5,6) )  )
 (define state-peek-scope (lambda (s) (if (empty-state? s)
                                          (error 'StatePeekScope "empty state") ; for debugging
-                                         (car s))))
+                                         (box (car (get-state s))))))
 ; return the first variable in the state
 (define state-peek-var (lambda (s) (cond ((empty-state? s) (error 'state-peek-scope "empty state"))
                                          ((empty-scope-state? (state-peek-scope s)) '())
-                                         (else (caar (state-peek-scope s))))))
+                                         (else (box (caar (get-state (state-peek-scope s))))))))
 ; return the first value in the state
 (define state-peek-val (lambda (s) (cond ((empty-state? s) (error 'state-peek-scope "empty state"))
                                          ((empty-scope-state? (state-peek-scope s)) '())
                                          (else (caadr (state-peek-scope s))))))
 
 ; return all but the first scope in the state
-(define state-rest-scope cdr) ; (cons empty-state '()) in null case?
+(define state-rest-scope (lambda (s) (box (cdr (get-state s))))) ; (cons empty-state '()) in null case?
 ; return a list of all but the first variable in the first scope of the state
-(define state-rest-vars (lambda (s) (cdar (state-peek-scope s))))
+(define state-rest-vars (lambda (s) (cdar (get-state (state-peek-scope s)))))
 ; return a list of all but the first value in the first scope of the state
-(define state-rest-vals (lambda (s) (cdadr (state-peek-scope s))))
+(define state-rest-vals (lambda (s) (cdadr (gets-state (state-peek-scope s)))))
 
 ; return the global (outermost/last) scope of a state
 (define state-global-scope
@@ -236,6 +242,7 @@
 
 ; takes a statment and a state and updates the state by evaluating the statement
 ; takes a program-return continuation, and 'goto'-continuations
+; the 'state' it receives is a boxed state.
 (define m-state
     (lambda (statement state break continue throw prog-return)
       (if (list? statement)
@@ -272,6 +279,7 @@
 
 ; bind a function name to its closure, where the closure consists of the formal parameter list,
 ; the function body, and a function that creates the function environment from the current environment
+; the 'state' it takes as a parameter is a boxed state
 (define m-state-funcdef
   (lambda (statement state break continue throw prog-return)
     (if (state-lookup-inscope? (funcdef-name statement) state)
