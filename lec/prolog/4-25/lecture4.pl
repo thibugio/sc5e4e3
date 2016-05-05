@@ -13,6 +13,7 @@ remove_binding(N, [[N,_]|S], S) :- !.
 remove_binding(N, [H|T], [H|S2]) :- remove_binding(N, T, S2).
 
 % M_value takes [x, +, 5]
+% M_value takes [x, *, 5]
 M_value([E1, +, E2], S, V) :- M_value(E1, S, V1), M_value(E2, S, V2), V is V1 + V2.
 M_value([E1, *, E2], S, V) :- M_value(E1, S, V1), M_value(E2, S, V2), V is V1 * V2.
 M_value(E, _, E) :- number(E).
@@ -20,7 +21,11 @@ M_value(E, S, V) :- lookup(E, S, V).
 
 % M_boolean takes [x, <, 10]
 % M_boolean takes [a, &&, b]
+% M_boolean takes [a, ||, b]
 M_boolean([E1, <, E2], S) :- M_value(E1, S, V1), M_value(E2, S, V2), V1 < V2.
+M_boolean([E1, &&, E2], S) :- M_value(E1, S, V1), M_value(E2, S, V2), V1, V2.
+M_boolean([E1, ||, E2], S) :- M_value(E1, S, V1), M_value(E2, S, V2), V1, !.
+M_boolean([E1, ||, E2], S) :- M_value(E1, S, V1), M_value(E2, S, V2), V2.
 
 % statement list
 M_state([], S, S).
