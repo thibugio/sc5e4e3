@@ -1,13 +1,14 @@
 ; Rebecca Frederick
 ; EECS 345
-; Programming Project 3
+; Programming Project 3 (using boxes)
 
 (load "functionParser.scm")
 
 ;======================================
+; error-handling: if debug=0, myerror will produce the intended error message; else it will produce
+; a real error, but the error message will include both arguments, plus the thing that gets printed.
 (define debug 1)
-(define myerror (lambda (a1 a2 printme) (if (zero? debug) (error a1 a2)
-                                            (error (car (cons a1 (cons (display printme) (cons (display "\n") '())))) a2))))
+(define myerror (lambda (a1 a2 printme) (if (zero? debug) (error a1 a2) (error a1 a2 (print printme)))))
 ; default continuations
 (define default-brk (lambda (s) (myerror 'break "Break outside of loop" s)));(error 'break "Break outside of loop")))
 (define default-con (lambda (s) (myerror 'continue "Continue outside of loop" s)));(error 'continue "Continue outside of loop")))
@@ -26,37 +27,34 @@
 
 ;=======================================
 ; main interpreter function
-; the state is passed around in a box.
 (define interpret
   (lambda (f)
     (call/cc
      (lambda (break)
        (let ((do-interpret (lambda (parsetree return)
                              (m-value '(funcall main) (create-table parsetree (box empty-state)) default-brk default-con default-throw return))))
-         (do-interpret (parser f) (lambda (v s) (break v))))))))
+         (do-interpret (parser f) (lambda (v bs) (break v))))))))
 
 ; same as interpret function from Project 2, but takes a parsetree directly instead of a file,
 ; an initial state, and a return continuation (lambda (v s)...) to know where to pass control
 ; after the function returns, and there the return value and resulting state will be handled appropriately.
 (define interpret-function
-  (lambda (parsetree state break continue throw return)
+  (lambda (parsetree bstate break continue throw return)
     (if (null? parsetree)
-        (return noValue state) ;this will be executed in the case with no return statement in the function body
-        (interpret-function (cdr parsetree) (m-state (car parsetree) state break continue throw return) break continue throw return))))
+        (return noValue bstate) ;this will be executed in the case with no return statement in the function body
+        (interpret-function (cdr parsetree) (m-state (car parsetree) bstate break continue throw return) break continue throw return))))
 
 ; returns the resulting program state from executing the expressions in a parsetree from a given initial state
 (define run-state
-    (lambda (pt state break continue throw prog-return)
+    (lambda (pt bstate break continue throw prog-return)
       (if (null? pt) 
-          state
+          bstate
           (run-state (cdr pt) 
-                     (m-state (car pt) state break continue throw prog-return)
+                     (m-state (car pt) bstate break continue throw prog-return)
                      break continue throw prog-return))))
 
 ;===================================
 ; state manipulation functions
-; all functions take a boxed state and either return a box, or return #<void> after operating on the box.
-; if using car/cdr directly on a state, make sure to use (get-state s) as the argument in case 's is a box.
 
 ; define program state as S = (((z, ...) (varInitVal, ...)) ((x, y, ...) (1, 2, ...))) =>
 ;   x:1:0, y:2:0, z:'Undefined:1,
@@ -64,33 +62,29 @@
 ; the second inner list records the value of the declared variables (in-order correspondence),
 ; and the outer list represents scope
 
-; return the actual state 
-(define get-state (lambda (s) (if (box? s) (unbox s) s)))
-
 ; check if scope-state is equal to empty-scope-state, since (eq? '(()) '(())) => #f
-(define empty-scope-state? (lambda (s) (and (not (empty-state? (get-state s)))
-                                            (null? (car (get-state s))))))
-(define empty-state? (lambda (s) (null? (get-state s))))
+(define empty-scope-state? (lambda (s) (null? (car s))))
+(define empty-state? (lambda (s) (null? s)))
 
 ; return the first scope in the state ( ->( (x,y,z) (1,2,3) )  ( (q,r,s) (4,5,6) )  )
 (define state-peek-scope (lambda (s) (if (empty-state? s)
                                          (error 'StatePeekScope "empty state") ; for debugging
-                                         (box (car (get-state s))))))
+                                         (car s))))
 ; return the first variable in the state
 (define state-peek-var (lambda (s) (cond ((empty-state? s) (error 'state-peek-scope "empty state"))
                                          ((empty-scope-state? (state-peek-scope s)) '())
-                                         (else (box (caar (get-state (state-peek-scope s))))))))
+                                         (else (caar (state-peek-scope s))))))
 ; return the first value in the state
 (define state-peek-val (lambda (s) (cond ((empty-state? s) (error 'state-peek-scope "empty state"))
                                          ((empty-scope-state? (state-peek-scope s)) '())
                                          (else (caadr (state-peek-scope s))))))
 
 ; return all but the first scope in the state
-(define state-rest-scope (lambda (s) (box (cdr (get-state s))))) ; (cons empty-state '()) in null case?
+(define state-rest-scope cdr) ; (cons empty-state '()) in null case?
 ; return a list of all but the first variable in the first scope of the state
-(define state-rest-vars (lambda (s) (cdar (get-state (state-peek-scope s)))))
+(define state-rest-vars (lambda (s) (cdar (state-peek-scope s))))
 ; return a list of all but the first value in the first scope of the state
-(define state-rest-vals (lambda (s) (cdadr (gets-state (state-peek-scope s)))))
+(define state-rest-vals (lambda (s) (cdadr (state-peek-scope s))))
 
 ; return the global (outermost/last) scope of a state
 (define state-global-scope
@@ -242,36 +236,36 @@
 
 ; takes a statment and a state and updates the state by evaluating the statement
 ; takes a program-return continuation, and 'goto'-continuations
-; the 'state' it receives is a boxed state.
+; takes a boxed state and returns a boxed state
 (define m-state
-    (lambda (statement state break continue throw prog-return)
+    (lambda (statement bstate break continue throw prog-return)
       (if (list? statement)
         (cond
-          ((eq? 'var (get-operator statement)) (m-state-var statement state break continue throw prog-return))
-          ((eq? '= (get-operator statement)) (m-state-assign statement state break continue throw prog-return) state)
-          ((eq? 'if (get-operator statement)) (m-state-if statement state break continue throw prog-return))
-          ((eq? 'while (get-operator statement)) (m-state-while statement state break continue throw prog-return))
-          ((eq? 'return (get-operator statement)) (m-state-return statement state break continue throw prog-return))
-          ((eq? 'begin (get-operator statement)) (m-state-begin-scope statement state break continue throw prog-return))
-          ((eq? 'break (get-operator statement)) (m-state-break state break))
-          ((eq? 'continue (get-operator statement)) (m-state-continue state continue))
-          ((eq? 'throw (get-operator statement)) (m-state-throw statement state break continue throw prog-return))
-          ((eq? 'try (get-operator statement)) (m-state-tcf statement state break continue throw prog-return))
+          ((eq? 'var (get-operator statement)) (m-state-var statement bstate break continue throw prog-return))
+          ((eq? '= (get-operator statement)) (m-state-assign statement bstate break continue throw prog-return) state)
+          ((eq? 'if (get-operator statement)) (m-state-if statement bstate break continue throw prog-return))
+          ((eq? 'while (get-operator statement)) (m-state-while statement bstate break continue throw prog-return))
+          ((eq? 'return (get-operator statement)) (m-state-return statement bstate break continue throw prog-return))
+          ((eq? 'begin (get-operator statement)) (m-state-begin-scope statement bstate break continue throw prog-return))
+          ((eq? 'break (get-operator statement)) (m-state-break bstate break))
+          ((eq? 'continue (get-operator statement)) (m-state-continue bstate continue))
+          ((eq? 'throw (get-operator statement)) (m-state-throw statement bstate break continue throw prog-return))
+          ((eq? 'try (get-operator statement)) (m-state-tcf statement bstate break continue throw prog-return))
           ((or (bool-op2? (get-operator statement))
                (comp-op? (get-operator statement))) (m-state (get-operand2 statement) 
-                                                             (m-state (get-operand1 statement) state break continue throw prog-return) 
+                                                             (m-state (get-operand1 statement) bstate break continue throw prog-return) 
                                                              break continue throw prog-return))
-          ((bool-op1? (get-operator statement)) (m-state (get-operand1 statement) state break continue throw prog-return))
-          ((eq? 'function (get-operator statement)) (m-state-funcdef statement state break continue throw prog-return))
-          ((eq? 'funcall (get-operator statement)) (m-state-funcall statement state break continue throw prog-return))
-          (else state));(else (myerror 'Mstate "Unknown statement" statement)))
+          ((bool-op1? (get-operator statement)) (m-state (get-operand1 statement) bstate break continue throw prog-return))
+          ((eq? 'function (get-operator statement)) (m-state-funcdef statement bstate break continue throw prog-return))
+          ((eq? 'funcall (get-operator statement)) (m-state-funcall statement bstate break continue throw prog-return))
+          (else bstate));(else (myerror 'Mstate "Unknown statement" statement)))
         (cond
-          ((or (number? (m-value statement state break continue throw prog-return))
-               (boolsym? (m-value statement state break continue throw prog-return))
-               (bool? (m-value statement state break continue throw prog-return))
+          ((or (number? (m-value statement bstate break continue throw prog-return))
+               (boolsym? (m-value statement bstate break continue throw prog-return))
+               (bool? (m-value statement bstate break continue throw prog-return))
                (eq? noValue statement)
-               (state-lookup? statement state))
-            state)
+               (state-lookup? statement (unbox bstate)))
+            bstate)
           (else (myerror 'Mstate "Unknown atom" statement))))))
 (define get-operator car)
 (define get-operand1 cadr)
@@ -279,16 +273,15 @@
 
 ; bind a function name to its closure, where the closure consists of the formal parameter list,
 ; the function body, and a function that creates the function environment from the current environment
-; the 'state' it takes as a parameter is a boxed state
 (define m-state-funcdef
-  (lambda (statement state break continue throw prog-return)
-    (if (state-lookup-inscope? (funcdef-name statement) state)
-        (myerror 'MstateFunctionBinding "Function already declared in this scope" state)
-        (state-add-binding (funcdef-name statement) (create-function-closure statement) state))))
+  (lambda (statement bstate break continue throw prog-return)
+    (if (state-lookup-inscope? (funcdef-name statement) (unbox bstate))
+        (myerror 'MstateFunctionBinding "Function already declared in this scope" (unbox bstate))
+        (box (state-add-binding (funcdef-name statement) (create-function-closure statement) (unbox bstate))))))
 
 ; interpret the function and copy the outer-scope variable values back to the original state README
 (define m-state-funcall
-  (lambda (statement state break continue throw prog-return)
+  (lambda (statement bstate break continue throw prog-return)
     (call/cc
      (lambda (mstatebreak)
        (let ((do-m-state-funcall (lambda (statement state)
@@ -296,43 +289,43 @@
                                        (myerror 'Mvalue_Funcall "Function not defined" (funcall-name statement))
                                        (evaluate-function-byreference (funcall-paramlist statement)
                                                                       (state-get-value (funcall-name statement) state)
-                                                                      state
+                                                                      (box state)
                                                                       break
                                                                       continue
-                                                                      (lambda (e s) (throw e (vars-not-inscope-copy s state)))
-                                                                      (lambda (v s) (mstatebreak (vars-not-inscope-copy s state))))))))
-         (do-m-state-funcall statement state))))))
+                                                                      (lambda (e s) (throw e (if (box? s) s (box s))));(vars-not-inscope-copy s state))))
+                                                                      (lambda (v s) (mstatebreak (if (box? s) s (box s)))))))));(box (vars-not-inscope-copy s state)))))))))
+         (do-m-state-funcall statement (unbox bstate)))))))
 
-(define m-state-break (lambda (state break) (break state)))
-(define m-state-continue (lambda (state continue) (continue state)))
+(define m-state-break (lambda (bstate break) (break bstate)))
+(define m-state-continue (lambda (bstate continue) (continue bstate)))
 
 
 (define m-state-throw
-  (lambda (statement state break continue throw prog-return)
-    (throw (m-value (except-stmt statement) state break continue throw prog-return) state)));README no side-effects
-    ;(throw (m-value (except-stmt statement) state break continue throw prog-return) (m-state (except-stmt statement) state break continue throw prog-return)))
+  (lambda (statement bstate break continue throw prog-return)
+    (throw (m-value (except-stmt statement) bstate break continue throw prog-return) bstate)));README no side-effects
+    ;(throw (m-value (except-stmt statement) bstate break continue throw prog-return) (m-state (except-stmt statement) bstate break continue throw prog-return)))
 (define except-stmt cadr)
 
 (define m-state-tcf
-  (lambda (statement state break continue throw prog-return)
+  (lambda (statement bstate break continue throw prog-return)
     (call/cc
      (lambda (try-break)
-       (letrec ((finally (lambda (s)
+       (letrec ((finally (lambda (bs)
                     (cond
-                      ((null? (finally-stmt statement)) s)
-                      ((list? (car (finally-body statement))) (run-state (finally-body statement) s break continue throw prog-return))
-                      (else (m-state (finally-body statement) s break continue throw prog-return)))))
+                      ((null? (finally-stmt statement)) bs)
+                      ((list? (car (finally-body statement))) (run-state (finally-body statement) bs break continue throw prog-return))
+                      (else (m-state (finally-body statement) bs break continue throw prog-return)))))
 
-                (try (lambda (s try-throw)
+                (try (lambda (bs try-throw)
                        (if (list? (car (try-body statement)))
-                           (finally (run-state (try-body statement) s break continue try-throw prog-return))
-                           (finally (m-state (try-body statement) s break continue try-throw prog-return)))))
+                           (finally (run-state (try-body statement) bs break continue try-throw prog-return))
+                           (finally (m-state (try-body statement) bs break continue try-throw prog-return)))))
 
-                (catch (lambda (e s)
+                (catch (lambda (e bs)
                          (if (list? (car (catch-body statement)))
-                             (finally (run-state (replace*-cps (catch-err statement) e (catch-body statement)) s break continue throw prog-return))
-                             (finally (m-state (replace*-cps (catch-err statement) e (catch-body statement)) s break continue throw prog-return))))))
-         (try state (lambda (e s) (try-break (catch e s)))) )))))
+                             (finally (run-state (replace*-cps (catch-err statement) e (catch-body statement)) bs break continue throw prog-return))
+                             (finally (m-state (replace*-cps (catch-err statement) e (catch-body statement)) bs break continue throw prog-return))))))
+         (try state (lambda (e bs) (try-break (catch e bs)))) )))))
 
   ; (try body (catch (e) body) (finally body))
 (define try-body cadr)
@@ -343,45 +336,45 @@
 
 ; a new block of code. pop the scope when finished executing.
 (define m-state-begin-scope
-  (lambda (statement state break continue throw prog-return)
+  (lambda (statement bstate break continue throw prog-return)
     (call/cc
      (lambda (brk)
        (let ((begin-scope (lambda (b c)
-                            (state-pop-scope (run-state (cdr statement) (state-push-scope state) b c throw prog-return)))))
-         (begin-scope (lambda (s) (brk (break (state-pop-scope s)))) (lambda (s) (brk (continue (state-pop-scope s))))))))))             
+                            (state-pop-scope (run-state (cdr statement) (box (state-push-scope (unbox bstate)))b b c throw prog-return)))))
+         (begin-scope (lambda (bs) (brk (break (box (state-pop-scope (unbox s)))))) (lambda (bs) (brk (continue (box (state-pop-scope (unbox s))))))))))))             
     
 ; update the state to reflect a new variable binding (= varname value) README: STATE only in '19/20 works' commit
 (define m-state-assign
-  (lambda (statement state break continue throw prog-return)
+  (lambda (statement bstate break continue throw prog-return)
     (state-assign (assign-var statement)
-                  (m-value (assign-expr statement) state break continue throw prog-return)
-                  (m-state (assign-expr statement) state break continue throw prog-return))));state)))
+                  (m-value (assign-expr statement) bstate break continue throw prog-return)
+                  (m-state (assign-expr statement) bstate break continue throw prog-return))));state)))
 (define state-assign
-  (lambda (var value state)
-    (if (not (state-lookup? var state))
+  (lambda (var value bstate)
+    (if (not (state-lookup? var (unbox bstate)))
         (myerror 'StateAssign "variable has not been declared" var)
         (((lambda (m) (m m))
           (lambda (f)
-            (lambda (var value s ret)
-              (if (state-lookup-inscope? var s)
-                  (ret (state-add-binding var value (state-rem-binding var s)))
-                  ((f f) var value (state-pop-scope s) (lambda (v) (ret (cons (state-peek-scope s) v))))))))
-         var value state (lambda (v) v)))))      
+            (lambda (var value bs ret)
+              (if (state-lookup-inscope? var (unbox bs))
+                  (ret (box (state-add-binding var value (state-rem-binding var (unbox bs)))))
+                  ((f f) var value (box (state-pop-scope (unbox bs))) (lambda (v) (ret (box (cons (state-peek-scope (unbox bs)) v)))))))))
+         var value bstate (lambda (v) v)))))      
 (define assign-var cadr)
 (define assign-expr caddr)
 
 ; if-then-else statement with side-effects
 (define m-state-if
-    (lambda (statement state break continue throw prog-return)
+    (lambda (statement bstate break continue throw prog-return)
         (cond 
-            ((m-bool (if-cond statement) (m-state (if-cond statement) state break continue throw prog-return) break continue throw prog-return)
+            ((m-bool (if-cond statement) (m-state (if-cond statement) bstate break continue throw prog-return) break continue throw prog-return)
              (m-state (if-then statement)
-                      (m-state (if-cond statement) state break continue throw prog-return)
+                      (m-state (if-cond statement) bstate break continue throw prog-return)
                       break continue throw prog-return))
-            ((eq? 3 (len statement)) state) ; no optional-else-statement
+            ((eq? 3 (len statement)) bstate) ; no optional-else-statement
             (else
              (m-state (if-optelse statement)
-                      (m-state (if-cond statement) state break continue throw prog-return)
+                      (m-state (if-cond statement) bstate break continue throw prog-return)
                       break continue throw prog-return)))))
 (define if-cond cadr)
 (define if-then caddr)
@@ -390,50 +383,50 @@
 ; returns the value of the expression along with the state by passing them
 ; to the return continuation: (lambda (v s) ... )
 (define m-state-return
-    (lambda (statement state break continue throw prog-return) 
+    (lambda (statement bstate break continue throw prog-return) 
         ;(state-add-binding progRetVal (m-value (return-expr statement) state) state)))
         (prog-return (if (and (list? (return-expr statement))
                               (or (bool-op1? (get-operator (return-expr statement)))
                                   (bool-op2? (get-operator (return-expr statement)))
                                   (comp-op? (get-operator (return-expr statement)))))
-                         (bool2sym (m-bool (return-expr statement) state break continue throw prog-return))
-                         (m-value (return-expr statement) state break continue throw prog-return))
-                     (m-state (return-expr statement) state break continue throw prog-return))));state)))
+                         (bool2sym (m-bool (return-expr statement) bstate break continue throw prog-return))
+                         (m-value (return-expr statement) bbstate break continue throw prog-return))
+                     (m-state (return-expr statement) bstate break continue throw prog-return))));state)))
 (define return-expr cadr)
 
 ; while-loop with side-effects
 (define m-state-while
-  (lambda (statement state break continue throw prog-return)
+  (lambda (statement bstate break continue throw prog-return)
     (call/cc
      (lambda (brk)
-       (letrec ((loop (lambda (statement state)
-                        (if (m-bool (while-cond statement) (m-state (while-cond statement) state break continue throw prog-return) break continue throw prog-return)
+       (letrec ((loop (lambda (statement bstate)
+                        (if (m-bool (while-cond statement) (m-state (while-cond statement) bstate break continue throw prog-return) break continue throw prog-return)
                             (loop statement (m-state (while-stmt statement)
-                                                     (m-state (while-cond statement) state break continue throw prog-return)
-                                                     (lambda (s) (brk s))
-                                                     (lambda (s) (brk (loop statement s)))
+                                                     (m-state (while-cond statement) bstate break continue throw prog-return)
+                                                     (lambda (bs) (brk bs))
+                                                     (lambda (bs) (brk (loop statement bs)))
                                                      throw prog-return))
-                            (m-state (while-cond statement) (m-state (while-cond statement) state break continue throw prog-return) break continue throw prog-return)))))
-         (loop statement state))))))                            
+                            (m-state (while-cond statement) (m-state (while-cond statement) bstate break continue throw prog-return) break continue throw prog-return)))))
+         (loop statement bstate))))))                            
 (define while-cond cadr)
 (define while-stmt caddr)
 
 ; variable declaration (var varname [value]) ; STATE only in README:'19/20 works' commit
 (define m-state-var
-    (lambda (statement state break continue throw prog-return)
+    (lambda (statement bstate break continue throw prog-return)
       (cond
-        ((state-lookup-inscope? (var-var statement) state) (error 'Mstate_var "Variable already declared"))
-        ((eq? 2 (len statement)) (state-add-binding (var-var statement) varInitVal state)) 
+        ((state-lookup-inscope? (var-var statement) (unbox bstate)) (error 'Mstate_var "Variable already declared"))
+        ((eq? 2 (len statement)) (box (state-add-binding (var-var statement) varInitVal (unbox bstate)))) 
         ((and (list? (var-value statement))
               (or (bool-op1? (get-operator (var-value statement)))
                   (bool-op2? (get-operator (var-value statement)))
                   (comp-op? (get-operator (var-value statement)))))
-         (state-add-binding (var-var statement)
-                            (bool2sym (m-bool (var-value statement) state break continue throw prog-return))
-                            (m-state (var-value statement) state break continue throw prog-return)));state))
-        (else (state-add-binding (var-var statement)
-                                 (m-value (var-value statement) state break continue throw prog-return)
-                                 (m-state (var-value statement) state break continue throw prog-return))))));state)))))
+         (box (state-add-binding (var-var statement)
+                                 (bool2sym (m-bool (var-value statement) bstate break continue throw prog-return))
+                                 (unbox (m-state (var-value statement) bstate break continue throw prog-return)))));state))
+        (else (box (state-add-binding (var-var statement)
+                                      (m-value (var-value statement) bstate break continue throw prog-return)
+                                      (unbox (m-state (var-value statement) bstate break continue throw prog-return))))))));state)))))
 (define var-var cadr)
 (define var-value caddr)
 
@@ -446,34 +439,34 @@
 
 ; returns a #t/#f value: whether the given condition is satisfied in the given state
 (define m-bool
-    (lambda (condition state break continue throw prog-return)
+    (lambda (condition bstate break continue throw prog-return)
       (if (list? condition)
         (cond
-            ((eq? '== (get-operator condition)) (eq? (m-value (get-operand1 condition) state break continue throw prog-return) 
-                                                     (m-value (get-operand2 condition) state break continue throw prog-return)))
-            ((eq? '!= (get-operator condition)) (not (eq? (m-value (get-operand1 condition) state break continue throw prog-return)
-                                                          (m-value (get-operand2 condition) state break continue throw prog-return))))
-            ((eq? '>= (get-operator condition)) (>= (m-value (get-operand1 condition) state break continue throw prog-return)
-                                                    (m-value (get-operand2 condition) state break continue throw prog-return)))
-            ((eq? '<= (get-operator condition)) (<= (m-value (get-operand1 condition) state break continue throw prog-return)
-                                                    (m-value (get-operand2 condition) state break continue throw prog-return)))
-            ((eq? '>  (get-operator condition)) (> (m-value (get-operand1 condition) state break continue throw prog-return)
-                                                   (m-value (get-operand2 condition) state break continue throw prog-return)))
-            ((eq? '<  (get-operator condition)) (< (m-value (get-operand1 condition) state break continue throw prog-return)
-                                                   (m-value (get-operand2 condition) state break continue throw prog-return)))
-            ((eq? '&& (get-operator condition)) (and (m-bool (get-operand1 condition) state break continue throw prog-return)
-                                                     (m-bool (get-operand2 condition) state break continue throw prog-return)))
-            ((eq? '|| (get-operator condition)) (or (m-bool (get-operand1 condition) state break continue throw prog-return)
-                                                    (m-bool (get-operand2 condition) state break continue throw prog-return)))
-            ((eq? '!  (get-operator condition)) (not (m-bool (get-operand1 condition) state break continue throw prog-return)))
-            ((eq? 'funcall (get-operator condition)) (m-bool (m-value condition state break continue throw prog-return) state break continue throw prog-return))
+            ((eq? '== (get-operator condition)) (eq? (m-value (get-operand1 condition) bstate break continue throw prog-return) 
+                                                     (m-value (get-operand2 condition) bstate break continue throw prog-return)))
+            ((eq? '!= (get-operator condition)) (not (eq? (m-value (get-operand1 condition) bstate break continue throw prog-return)
+                                                          (m-value (get-operand2 condition) bstate break continue throw prog-return))))
+            ((eq? '>= (get-operator condition)) (>= (m-value (get-operand1 condition) bstate break continue throw prog-return)
+                                                    (m-value (get-operand2 condition) bstate break continue throw prog-return)))
+            ((eq? '<= (get-operator condition)) (<= (m-value (get-operand1 condition) bstate break continue throw prog-return)
+                                                    (m-value (get-operand2 condition) bstate break continue throw prog-return)))
+            ((eq? '>  (get-operator condition)) (> (m-value (get-operand1 condition) bstate break continue throw prog-return)
+                                                   (m-value (get-operand2 condition) bstate break continue throw prog-return)))
+            ((eq? '<  (get-operator condition)) (< (m-value (get-operand1 condition) bstate break continue throw prog-return)
+                                                   (m-value (get-operand2 condition) bstate break continue throw prog-return)))
+            ((eq? '&& (get-operator condition)) (and (m-bool (get-operand1 condition) bstate break continue throw prog-return)
+                                                     (m-bool (get-operand2 condition) bstate break continue throw prog-return)))
+            ((eq? '|| (get-operator condition)) (or (m-bool (get-operand1 condition) bstate break continue throw prog-return)
+                                                    (m-bool (get-operand2 condition) bstate break continue throw prog-return)))
+            ((eq? '!  (get-operator condition)) (not (m-bool (get-operand1 condition) bstate break continue throw prog-return)))
+            ((eq? 'funcall (get-operator condition)) (m-bool (m-value condition bstate break continue throw prog-return) state break continue throw prog-return))
             (else (myerror 'Mbool "Unknown expression" (get-operator condition))))
         (cond
           ((number? condition) (myerror 'Mbool "Type Error: given Number, expected Boolean" condition))
           ((eq? noValue condition) (myerror 'Mbool "Type Error: given 'Void', expected Boolean" condition))
           ((boolsym? condition) (sym2bool condition))
           ((bool? condition) condition)
-          ((state-lookup? condition state) (m-bool (state-get-value condition state) state break continue throw prog-return))
+          ((state-lookup? condition (unbox bstate)) (m-bool (state-get-value condition (unbox bstate)) bstate break continue throw prog-return))
           (else (myerror 'Mbool "Unknown atom" condition))))))
 
 (define bool2sym (lambda (b) (if b 'true 'false)))
@@ -503,25 +496,25 @@
 
 ; Mvalue takes an expression and a state, and returns a numeric value, boolean value, or error condition
 (define m-value
-    (lambda (statement state break continue throw prog-return)
+    (lambda (statement bstate break continue throw prog-return)
       (if (list? statement)
        (cond
             ((and (eq? 2 (len statement))
-                  (eq? '- (get-operator statement))) (* -1 (m-value (get-operand1 statement) state break continue throw prog-return))) ; unary operator
-            ((eq? '+ (get-operator statement)) (+ (m-value (get-operand1 statement) state break continue throw prog-return) 
-                                                  (m-value (get-operand2 statement) state break continue throw prog-return)))
-            ((eq? '- (get-operator statement)) (- (m-value (get-operand1 statement) state break continue throw prog-return) 
-                                                  (m-value (get-operand2 statement) state break continue throw prog-return)))
-            ((eq? '* (get-operator statement)) (* (m-value (get-operand1 statement) state break continue throw prog-return) 
-                                                  (m-value (get-operand2 statement) state break continue throw prog-return)))
-            ((eq? '/ (get-operator statement)) (quotient (m-value (get-operand1 statement) state break continue throw prog-return) 
-                                                         (m-value (get-operand2 statement) state break continue throw prog-return)))
-            ((eq? '% (get-operator statement)) (remainder (m-value (get-operand1 statement) state break continue throw prog-return) 
-                                                          (m-value (get-operand2 statement) state break continue throw prog-return)))
+                  (eq? '- (get-operator statement))) (* -1 (m-value (get-operand1 statement) bstate break continue throw prog-return))) ; unary operator
+            ((eq? '+ (get-operator statement)) (+ (m-value (get-operand1 statement) bstate break continue throw prog-return) 
+                                                  (m-value (get-operand2 statement) bstate break continue throw prog-return)))
+            ((eq? '- (get-operator statement)) (- (m-value (get-operand1 statement) bstate break continue throw prog-return) 
+                                                  (m-value (get-operand2 statement) bstate break continue throw prog-return)))
+            ((eq? '* (get-operator statement)) (* (m-value (get-operand1 statement) bstate break continue throw prog-return) 
+                                                  (m-value (get-operand2 statement) bstate break continue throw prog-return)))
+            ((eq? '/ (get-operator statement)) (quotient (m-value (get-operand1 statement) bstate break continue throw prog-return) 
+                                                         (m-value (get-operand2 statement) bstate break continue throw prog-return)))
+            ((eq? '% (get-operator statement)) (remainder (m-value (get-operand1 statement) bstate break continue throw prog-return) 
+                                                          (m-value (get-operand2 statement) bstate break continue throw prog-return)))
             ((eq? '= (get-operator statement)) (m-value (state-get-value (assign-var statement)
-                                                                         (m-state statement state break continue throw prog-return))
-                                                        (m-state statement state break continue throw prog-return) break continue throw prog-return))
-            ((eq? 'funcall (get-operator statement)) (m-value-funcall statement state break continue throw prog-return))
+                                                                         (m-state statement bstate break continue throw prog-return))
+                                                        (m-state statement bstate break continue throw prog-return) break continue throw prog-return))
+            ((eq? 'funcall (get-operator statement)) (m-value-funcall statement bstate break continue throw prog-return))
             (else (myerror 'Mvalue "Unknown statement" statement)))
        (cond
             ((number? statement) statement)            
@@ -529,27 +522,27 @@
             ((bool? statement) statement)
             ((eq? noValue statement) statement)
             ((eq? varInitVal statement) (myerror 'Mvalue "Variable undefined" statement))
-            ((not (state-lookup? statement state)) (myerror 'Mvalue "Variable not declared" statement))
-            ((state-lookup? statement state) (m-value (state-get-value statement state) state break continue throw prog-return))
+            ((not (state-lookup? statement (unbox bstate))) (myerror 'Mvalue "Variable not declared" statement))
+            ((state-lookup? statement (unbox bstate)) (m-value (state-get-value statement (unbox bstate)) bstate break continue throw prog-return))
             (else (myerror 'Mvalue "Unknown atom" statement))))))
 
 ; do basic error-checking on the function call then evaluate the function
 ; (m-value ...) does not update the state, so no need to copy the environment here.
 (define m-value-funcall ;README
-  (lambda (statement state break continue throw prog-return)
+  (lambda (statement bstate break continue throw prog-return)
     (call/cc
      (lambda (mvaluebreak)
-       (let ((do-m-value-funcall (lambda (statement state break continue throw prog-return)
-                                   (if (not (state-lookup? (funcall-name statement) state))
+       (let ((do-m-value-funcall (lambda (statement bstate break continue throw prog-return)
+                                   (if (not (state-lookup? (funcall-name statement) (unbox bstate)))
                                        (myerror 'Mvalue_Funcall "Function not defined" (funcall-name statement))
                                        (evaluate-function-byreference (funcall-paramlist statement)
-                                                                      (state-get-value (funcall-name statement) state)
-                                                                      state
+                                                                      (state-get-value (funcall-name statement) (unbox bstate))
+                                                                      bstate
                                                                       break
                                                                       continue
-                                                                      (lambda (e s) (throw e (vars-not-inscope-copy s state)))
+                                                                      (lambda (e s) (throw e (if (box? s) s (box s))));(box (vars-not-inscope-copy s (unbox bstate)))))
                                                                       (lambda (v s) (mvaluebreak (check-func-return v))))))))
-         (do-m-value-funcall statement state break continue throw prog-return))))))
+         (do-m-value-funcall statement bstate break continue throw prog-return))))))
 
 ; evaluate a function-call by-reference.
 ; done in bind-params-byreference:
@@ -559,9 +552,9 @@
 ; takes a return function (lambda (v s)...) to handle the return value and resulting state, and return the
 ; proper value (or state) to the caller.
 (define evaluate-function-byreference
-  (lambda (paramlist closure currentstate break continue throw return)
+  (lambda (paramlist closure bcurrentstate break continue throw return)
     (interpret-function (closure-fbody closure)
-                        (bind-params-byreference paramlist closure currentstate break continue throw (lambda (v s) (print "foo")))
+                        (bind-params-byreference paramlist closure bcurrentstate break continue throw (lambda (v s) (error 'EvaluateFunctionByReference "Called return")))
                         break
                         continue
                         throw
@@ -569,44 +562,45 @@
 
 ; returns the function environment with the new parameter bindings
 (define bind-params-byreference
-  (lambda (paramlist closure currentstate break continue throw prog-return)
+  (lambda (paramlist closure bcurrentstate break continue throw prog-return)
     (((lambda (m) (m m))
       (lambda (f)
-        (lambda (actuals formals fenv currentenv)
+        (lambda (actuals formals bfenv bcurrentenv)
           (cond
-            ((and (null? actuals) (null? formals)) fenv)
+            ((and (null? actuals) (null? formals)) bfenv)
             ((or (null? actuals) (null? formals)) (myerror 'BindParamsByReference "Actual and Formal Parameter lists differ in length" actuals))
             ((and (eq? '& (car formals))
                   (or (number? (car evaluated)) (bool? (car evaluated)) (boolsym? (car evaluated))))
              (error 'BindParamsByReference "Cannot pass a literal value as a reference"))
-            ((eq? '& (car formals)) ((f f) (cdr actuals) (cddr formals) fenv currentenv)) ;TODO
+            ((eq? '& (car formals)) ((f f) (cdr actuals) (cddr formals) bfenv bcurrentenv)) ;TODO
             (else ((f f) (cdr actuals)
                          (cdr formals)
-                         (state-add-binding (car formals)
-                                            (m-value (car actuals) currentenv  break continue throw prog-return)
-                                            fenv)
-                         currentenv))))))
-     (evaluate-params-byreference paramlist currentstate break continue throw '())
+                         (box (state-add-binding (car formals)
+                                                 (m-value (car actuals) bcurrentenv  break continue throw prog-return)
+                                                 (unbox bfenv)))
+                         bcurrentenv))))))
+     (evaluate-params-byreference paramlist bcurrentstate break continue throw '())
      (closure-paramlist closure)
-     (state-push-scope ((closure-env closure) currentstate))
-     currentstate)))
+     (box (state-push-scope ((closure-env closure) (unbox bcurrentstate))))
+     bcurrentstate)))
 
 ; evaluate the parameters in the current context.
 ; details: evaluation of all parameters is done using the original current state,
 ; so if a parameter-expression modifies a global variable that is used by a later
 ; parameter, that change will not be reflected in the evaluation of the later param.
 (define evaluate-params-byreference
-  (lambda (paramlist currentstate break continue throw savelist)
+  (lambda (paramlist bcurrentstate break continue throw savelist)
     (call/cc
      (lambda (evalbreak)
        (let ((do-eval-params-byreference ((lambda (m) (m m))
                                            (lambda (f)
-                                             (lambda (l s save)
+                                             (lambda (l bs save)
                                                (cond
                                                  ((null? l) save)
-                                                 ((pair? (car l)) ((f f) (cdr l) s (myappend save (cons (m-value (car l) s  break continue throw (lambda (v s) (evaluate-params-byreference l s (myappend save (cons (break v) '()))))) '()))))
-                                                 (else ((f f) (cdr l) s (myappend save (cons (car l) '())))))))))) ; don't evaluate symbolic variable
-         (do-eval-params-byreference paramlist currentstate savelist))))))
+                                                 ((pair? (car l)) ((f f) (cdr l) bs (myappend save
+                                                                                              (cons (m-value (car l) bs  break continue throw (lambda (v s) (evaluate-params-byreference l (if (box? s) s (box s)) (myappend save (cons (break v) '()))))) '()))))
+                                                 (else ((f f) (cdr l) bs (myappend save (cons (car l) '())))))))))) ; don't evaluate symbolic variable
+         (do-eval-params-byreference paramlist bcurrentstate savelist))))))
 
 ; check the value returned from the function (mostly to enforce consistency with true/false vs #t/#f)
 (define check-func-return
@@ -623,8 +617,8 @@
 ; Mname
 
 (define m-name
-    (lambda (variable state)
-        (if (state-lookup-inscope? variable state)
+    (lambda (variable bstate)
+        (if (state-lookup-inscope? variable (unbox bstate))
             variable
             (error 'Mname "Variable not found in the state"))))
 
@@ -634,12 +628,12 @@
 ; 'outer layer' of the interpreter: create a symbol table with global variable and function definitions.
 ; This will be the base layer of the program's environment. the 'table' is just a single-scope state.
 (define create-table
-  (lambda (parsetree table)
+  (lambda (parsetree btable)
     (cond
-      ((null? parsetree) table)
+      ((null? parsetree) btable)
       ((or (eq? 'var (get-operator (car parsetree))) 
            (eq? 'function (get-operator (car parsetree)))) 
-       (create-table (cdr parsetree) (m-state (car parsetree) table default-brk default-con default-throw default-ret)))
+       (create-table (cdr parsetree) (m-state (car parsetree) btable default-brk default-con default-throw default-ret)))
       (else (error 'CreateTable "Can only have variable/function declarations at global level")))))
 
 ; create the function closure from the funtion-definition statement: (function <name> (<args>) (<body>))
